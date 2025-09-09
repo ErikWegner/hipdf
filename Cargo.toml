@@ -20,7 +20,10 @@ name = "hipdf"
 path = "src/lib.rs"
 
 [dependencies]
+jpeg-decoder = "0.3.2"
 lopdf = "0.38.0"
+miniz_oxide = "0.8.9"
+png = "0.18.0"
 
 [dev-dependencies]
 

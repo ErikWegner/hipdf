@@ -31,13 +31,16 @@
 //! ## Modules
 //!
 //! - [`ocg`] - Optional Content Groups (layers) functionality
-//! - [`layer`] - Layer management and utilities
 //! - [`hatching`] - Hatching and pattern support for PDF documents
+//! - [`embed_pdf`] - Embedding existing PDF documents
+//! - [`blocks`] - Block content management
+//! - [`images`] - Image embedding and manipulation
 
 pub mod embed_pdf;
 pub mod hatching;
 pub mod ocg;
 pub mod blocks;
+pub mod images;
 
 pub use lopdf;
 
