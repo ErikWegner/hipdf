@@ -147,3 +147,7 @@ fn create_layered_pdf_example() -> Result<(), Box<dyn std::error::Error>> {
     
     Ok(())
 }
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    create_layered_pdf_example()
+}

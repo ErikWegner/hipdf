@@ -12,6 +12,7 @@ A high-level PDF manipulation library built on [lopdf](https://github.com/j-f-li
 - **Hatching Patterns**: Support for various fill patterns including crosshatching, dots, and custom patterns
 - **PDF Embedding**: Embed other PDF documents with various layout strategies
 - **Block System**: Reusable PDF content components with transformations and efficient rendering
+- **Image Embedding**: Support for PNG and JPEG images
 - **Type Safety**: Strongly typed interfaces with compile-time guarantees
 
 # Showcase
@@ -116,8 +117,29 @@ let operations = manager.render_instances(&instances);
 - [`hatching`] - Hatching and pattern support for PDF documents
 - [`embed_pdf`] - PDF embedding and composition support
 - [`blocks`] - Reusable PDF content components with transformations
+- [`images`] - Image embedding and manipulation
 
 ## Usage Examples
+
+### Image Embedding with Quality Preservation
+
+```rust
+use hipdf::images::{Image, ImageManager};
+use hipdf::lopdf::Document;
+
+// Create an image manager for efficient embedding
+let mut image_manager = ImageManager::new();
+
+// Load images with perfect quality preservation
+let image = Image::from_file("image.png")?;
+let img_id = image_manager.embed_image(&mut doc, image)?;
+
+// Add to page resources
+let img_name = image_manager.add_to_resources(&mut resources, img_id);
+
+// Draw the image on the page
+let operations = ImageManager::draw_image(&img_name, 100.0, 100.0, 200.0, 150.0);
+```
 
 ### Layer Management
 

@@ -110,3 +110,7 @@ fn embed_pdf_example() -> Result<(), Box<dyn std::error::Error>> {
     
     Ok(())
 }
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    embed_pdf_example()
+}
