@@ -29,14 +29,6 @@
 //! ocg_manager.initialize(&mut doc);
 //! ```
 //!
-//! ## WASM Support
-//!
-//! This library automatically configures itself for WASM targets.
-//! ```rust
-//! #[cfg(target_arch = "wasm32")]
-//! hipdf::init_wasm();
-//! ```
-//!
 //! ## Modules
 //!
 //! - [`ocg`] - Optional Content Groups (layers) functionality
@@ -52,13 +44,6 @@ pub mod blocks;
 pub mod images;
 
 pub use lopdf;
-
-// WASM-specific configuration
-#[cfg(target_arch = "wasm32")]
-pub fn init_wasm() {
-    // Initialize WASM-specific features
-    // This function can be called by users to ensure proper WASM setup
-}
 
 // Common type aliases and utilities
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
