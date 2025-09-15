@@ -283,7 +283,6 @@ checksum = "9229cfe53dfd69f0609a49f65461bd93001ea1ef889cd5529dd176593f5338a1"
 name = "hipdf"
 version = "0.0.0-development"
 dependencies = [
- "getrandom",
  "jpeg-decoder",
  "lopdf",
  "miniz_oxide",

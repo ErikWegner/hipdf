@@ -21,24 +21,28 @@ path = "src/lib.rs"
 
 [dependencies]
 jpeg-decoder = "0.3.2"
-lopdf = { version = "0.38.0", default-features = false }
 miniz_oxide = "0.8.9"
 png = "0.18.0"
 
-# WASM support - automatically enabled when targeting wasm32-unknown-unknown
+# Target-specific configuration to ensure correct behavior without consumer-side feature flags
+# For non-WASM targets, use lopdf with its default native features
+[target.'cfg(not(all(target_arch = "wasm32", target_os = "unknown")))'.dependencies]
+lopdf = { version = "0.38.0" }
+
+# For wasm32-unknown-unknown, enable lopdf's wasm_js mode and getrandom's wasm_js support
 [target.'cfg(all(target_arch = "wasm32", target_os = "unknown"))'.dependencies]
-getrandom = { version = "0.3", features = ["wasm_js"] }
+lopdf = { version = "0.38.0", default-features = false, features = ["wasm_js"] }
 
 [dev-dependencies]
 png = { version = "0.18.0", features = ["unstable"] }
 wasm-bindgen-test = "0.3"
 
 [features]
-default = ["native"]
-# Enable WASM support for lopdf when targeting WASM
-wasm_js = ["lopdf/wasm_js"]
-# Default features for non-WASM targets
-native = ["lopdf/default"]
+# No feature flags are required by consumers; behavior is selected automatically by target.
+# These are kept empty for backward compatibility so enabling them has no effect.
+default = []
+wasm_js = []
+native = []
 
 # Test configuration
 [package.metadata.docs.rs]

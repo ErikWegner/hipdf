@@ -143,7 +143,6 @@ main() {
     echo "  • Use the library in WASM environments without manual configuration"
     echo "  • Load images from bytes using Image::from_bytes()"
     echo "  • Embed images in PDF documents in browser environments"
-    echo "  • All without needing to add getrandom dependencies to their projects"
 }
 
 # Run main function
