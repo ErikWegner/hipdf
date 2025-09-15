@@ -21,15 +21,24 @@ path = "src/lib.rs"
 
 [dependencies]
 jpeg-decoder = "0.3.2"
-lopdf = "0.38.0"
+lopdf = { version = "0.38.0", default-features = false }
 miniz_oxide = "0.8.9"
 png = "0.18.0"
 
+# WASM support - automatically enabled when targeting wasm32-unknown-unknown
+[target.'cfg(all(target_arch = "wasm32", target_os = "unknown"))'.dependencies]
+getrandom = { version = "0.3", features = ["wasm_js"] }
+
 [dev-dependencies]
 png = { version = "0.18.0", features = ["unstable"] }
+wasm-bindgen-test = "0.3"
 
 [features]
-default = []
+default = ["native"]
+# Enable WASM support for lopdf when targeting WASM
+wasm_js = ["lopdf/wasm_js"]
+# Default features for non-WASM targets
+native = ["lopdf/default"]
 
 # Test configuration
 [package.metadata.docs.rs]

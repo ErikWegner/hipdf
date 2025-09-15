@@ -1,0 +1,36 @@
+# Build artifacts
+/target/
+Cargo.lock
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Test outputs
+/tests/outputs/
+/node_modules/
+
+# Documentation
+/doc/
+
+# CI/CD
+.github/
+
+# Development scripts
+*.sh
+test_wasm.sh
+
+# Release configuration
+release.config.cjs
+bun.lock
+
+# Package lock files (if using npm/yarn)
+package-lock.json
+yarn.lock

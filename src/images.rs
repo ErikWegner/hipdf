@@ -530,6 +530,26 @@ impl Image {
     pub fn aspect_ratio(&self) -> f32 {
         self.metadata.width as f32 / self.metadata.height as f32
     }
+
+    /// Creates an image from bytes (for WASM compatibility)
+    pub fn from_bytes(data: Vec<u8>, source_path: Option<String>) -> Result<Self, Box<dyn std::error::Error>> {
+        let format = Self::detect_format(&data)?;
+
+        match format {
+            ImageFormat::PNG => Self::from_png_data_enhanced(data, source_path),
+            ImageFormat::JPEG => Self::from_jpeg_data(data, source_path),
+        }
+    }
+
+    /// Creates an image from PNG bytes (alias for consistency)
+    pub fn from_png_bytes(data: Vec<u8>) -> Result<Self, Box<dyn std::error::Error>> {
+        Self::from_png_data_enhanced(data, None)
+    }
+
+    /// Creates an image from JPEG bytes (alias for consistency)
+    pub fn from_jpeg_bytes(data: Vec<u8>) -> Result<Self, Box<dyn std::error::Error>> {
+        Self::from_jpeg_data(data, None)
+    }
 }
 
 /// Helper struct for PNG chunk data

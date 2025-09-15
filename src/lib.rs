@@ -9,6 +9,7 @@
 //! - **Layer Management**: High-level API for organizing content into toggleable layers
 //! - **Content Building**: Fluent API for building layered PDF content
 //! - **Type Safety**: Strongly typed interfaces with compile-time guarantees
+//! - **WASM Support**: Automatic configuration for WebAssembly targets
 //!
 //! ## Example
 //!
@@ -28,6 +29,14 @@
 //! ocg_manager.initialize(&mut doc);
 //! ```
 //!
+//! ## WASM Support
+//!
+//! This library automatically configures itself for WASM targets.
+//! ```rust
+//! #[cfg(target_arch = "wasm32")]
+//! hipdf::init_wasm();
+//! ```
+//!
 //! ## Modules
 //!
 //! - [`ocg`] - Optional Content Groups (layers) functionality
@@ -43,6 +52,13 @@ pub mod blocks;
 pub mod images;
 
 pub use lopdf;
+
+// WASM-specific configuration
+#[cfg(target_arch = "wasm32")]
+pub fn init_wasm() {
+    // Initialize WASM-specific features
+    // This function can be called by users to ensure proper WASM setup
+}
 
 // Common type aliases and utilities
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;

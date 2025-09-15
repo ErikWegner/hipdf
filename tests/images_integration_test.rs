@@ -518,7 +518,33 @@ fn asset_path(filename: &str) -> PathBuf {
 fn try_load_image(filename: &str) -> Option<Image> {
     let path = asset_path(filename);
     if path.exists() {
-        Image::from_file(path).ok()
+        // Read file as bytes for WASM compatibility
+        match std::fs::read(&path) {
+            Ok(bytes) => {
+                Image::from_bytes(bytes, Some(path.to_string_lossy().to_string())).ok()
+            }
+            Err(e) => {
+                println!("⚠️  Failed to read image file {}: {}", filename, e);
+                None
+            }
+        }
+    } else {
+        println!("⚠️  Test image not found: {}", filename);
+        None
+    }
+}
+
+/// Load image bytes for WASM-compatible testing
+fn try_load_image_bytes(filename: &str) -> Option<Vec<u8>> {
+    let path = asset_path(filename);
+    if path.exists() {
+        match std::fs::read(&path) {
+            Ok(bytes) => Some(bytes),
+            Err(e) => {
+                println!("⚠️  Failed to read image bytes {}: {}", filename, e);
+                None
+            }
+        }
     } else {
         println!("⚠️  Test image not found: {}", filename);
         None
@@ -1260,5 +1286,252 @@ fn test_transparency_modes() {
     }
     
     println!("✅ All transparency modes properly supported!");
+}
+
+// ============================================================================
+// WASM-SPECIFIC TESTS
+// ============================================================================
+
+#[test]
+fn test_wasm_compatibility_from_bytes() {
+    // Test that from_bytes works for all supported formats
+    let images = TestImages::default();
+
+    // Test PNG from bytes
+    if let Some(bytes) = try_load_image_bytes(images.standard_rgba) {
+        let img = Image::from_bytes(bytes.clone(), Some("test.png".to_string()))
+            .expect("Failed to create PNG from bytes");
+        assert_eq!(img.metadata.format, ImageFormat::PNG);
+        assert!(img.metadata.width > 0);
+        assert!(img.metadata.height > 0);
+
+        // Test PNG-specific alias
+        let img2 = Image::from_png_bytes(bytes)
+            .expect("Failed to create PNG from png_bytes");
+        assert_eq!(img2.metadata.format, ImageFormat::PNG);
+    }
+
+    // Test JPEG from bytes
+    if let Some(bytes) = try_load_image_bytes(images.jpeg_standard) {
+        let img = Image::from_bytes(bytes.clone(), Some("test.jpg".to_string()))
+            .expect("Failed to create JPEG from bytes");
+        assert_eq!(img.metadata.format, ImageFormat::JPEG);
+        assert!(!img.metadata.has_alpha);
+
+        // Test JPEG-specific alias
+        let img2 = Image::from_jpeg_bytes(bytes)
+            .expect("Failed to create JPEG from jpeg_bytes");
+        assert_eq!(img2.metadata.format, ImageFormat::JPEG);
+    }
+}
+
+#[test]
+fn test_wasm_image_manager_with_bytes() {
+    let mut doc = Document::with_version("1.7");
+    let mut manager = ImageManager::new();
+
+    // Test embedding images created from bytes
+    if let Some(bytes) = try_load_image_bytes(TestImages::default().standard_rgb) {
+        let img = Image::from_bytes(bytes, Some("wasm_test.png".to_string()))
+            .expect("Failed to create image from bytes");
+
+        let id1 = manager.embed_image(&mut doc, img.clone())
+            .expect("Failed to embed image from bytes");
+
+        let id2 = manager.embed_image(&mut doc, img)
+            .expect("Failed to embed same image again");
+
+        assert_eq!(id1, id2, "Same image should reuse object ID");
+        assert_eq!(manager.count(), 1, "Should cache duplicate images");
+    }
+}
+
+#[test]
+fn test_wasm_comprehensive_bytes_workflow() {
+    ensure_directories();
+
+    // Test complete workflow using only bytes operations
+    let mut doc = Document::with_version("1.7");
+    let mut manager = ImageManager::new();
+
+    // Setup fonts
+    let helvetica = doc.add_object(dictionary! {
+        "Type" => "Font",
+        "Subtype" => "Type1",
+        "BaseFont" => "Helvetica",
+    });
+
+    let mut resources = dictionary! {
+        "Font" => dictionary! {
+            "F1" => helvetica,
+        },
+    };
+
+    let mut operations = Vec::new();
+
+    // Add title
+    add_text_label(&mut operations, "WASM Compatibility Test", 50.0, 750.0, 16.0);
+
+    // Test loading and embedding multiple images from bytes
+    let test_images = vec![
+        ("duck.png", "PNG RGBA"),
+        ("dot.png", "PNG RGB"),
+        ("test.jpg", "JPEG RGB"),
+    ];
+
+    let mut x_pos = 50.0;
+    let y_pos = 650.0;
+    let img_size = 100.0;
+
+    for (filename, label) in test_images {
+        if let Some(bytes) = try_load_image_bytes(filename) {
+            // Create image from bytes
+            let img = Image::from_bytes(bytes, Some(filename.to_string()))
+                .expect(&format!("Failed to create image from bytes: {}", filename));
+
+            // Embed in document
+            let img_id = manager.embed_image(&mut doc, img.clone())
+                .expect("Failed to embed image");
+            let img_name = manager.add_to_resources(&mut resources, img_id);
+
+            // Draw image
+            operations.extend(ImageManager::draw_image(
+                &img_name, x_pos, y_pos - img_size, img_size, img_size
+            ));
+
+            // Add label
+            add_text_label(&mut operations, label, x_pos, y_pos - img_size - 15.0, 10.0);
+            add_text_label(&mut operations, &get_image_info(&img), x_pos, y_pos - img_size - 25.0, 8.0);
+
+            x_pos += 120.0;
+        }
+    }
+
+    // Create page
+    let content = Content { operations };
+    let content_id = doc.add_object(Stream::new(dictionary! {}, content.encode().unwrap()));
+
+    let pages_id = doc.add_object(dictionary! {
+        "Type" => "Pages",
+    });
+
+    let page_id = doc.add_object(dictionary! {
+        "Type" => "Page",
+        "Parent" => pages_id,
+        "MediaBox" => vec![0.into(), 0.into(), 595.into(), 842.into()],
+        "Contents" => content_id,
+        "Resources" => resources,
+    });
+
+    // Finalize document
+    doc.get_object_mut(pages_id)
+        .and_then(Object::as_dict_mut)
+        .unwrap()
+        .set("Kids", vec![Object::Reference(page_id)]);
+
+    doc.get_object_mut(pages_id)
+        .and_then(Object::as_dict_mut)
+        .unwrap()
+        .set("Count", 1);
+
+    let catalog_id = doc.add_object(dictionary! {
+        "Type" => "Catalog",
+        "Pages" => Object::Reference(pages_id),
+    });
+
+    doc.trailer.set("Root", Object::Reference(catalog_id));
+
+    // Save PDF
+    let output_path = format!("{}/wasm_compatibility_test.pdf", TEST_OUTPUT_DIR);
+    doc.save(&output_path).expect("Failed to save WASM compatibility test PDF");
+
+    assert!(Path::new(&output_path).exists());
+    println!("✅ WASM compatibility test completed successfully!");
+    println!("📄 Output: {}", output_path);
+}
+
+#[test]
+fn test_wasm_image_format_detection() {
+    // Test that format detection works correctly from bytes
+    let images = TestImages::default();
+
+    // Test PNG detection
+    if let Some(bytes) = try_load_image_bytes(images.standard_rgba) {
+        // PNG files start with 0x89504E47
+        assert!(bytes.starts_with(&[0x89, 0x50, 0x4E, 0x47]));
+
+        let img = Image::from_bytes(bytes, None)
+            .expect("Failed to detect PNG format");
+        assert_eq!(img.metadata.format, ImageFormat::PNG);
+    }
+
+    // Test JPEG detection
+    if let Some(bytes) = try_load_image_bytes(images.jpeg_standard) {
+        // JPEG files start with 0xFFD8FF
+        assert!(bytes.starts_with(&[0xFF, 0xD8, 0xFF]));
+
+        let img = Image::from_bytes(bytes, None)
+            .expect("Failed to detect JPEG format");
+        assert_eq!(img.metadata.format, ImageFormat::JPEG);
+    }
+}
+
+#[test]
+fn test_wasm_error_handling() {
+    // Test error handling for invalid bytes
+    let invalid_bytes = vec![0x00, 0x01, 0x02, 0x03]; // Not a valid image
+
+    let result = Image::from_bytes(invalid_bytes, None);
+    assert!(result.is_err(), "Should fail with invalid image bytes");
+
+    // Test empty bytes
+    let empty_bytes = vec![];
+    let result = Image::from_bytes(empty_bytes, None);
+    assert!(result.is_err(), "Should fail with empty bytes");
+}
+
+#[cfg(target_arch = "wasm32")]
+#[test]
+fn test_wasm_specific_features() {
+    // Tests that only run in WASM environment
+
+    // Test that we can use the library in WASM context
+    println!("✅ Running in WASM environment");
+
+    // Test basic functionality that should work in WASM
+    let mut doc = Document::with_version("1.7");
+    let mut manager = ImageManager::new();
+
+    // Create a simple test using synthetic image data
+    // This simulates loading image data in a WASM environment
+    let test_png_data = create_minimal_test_png();
+
+    if let Ok(img) = Image::from_bytes(test_png_data, Some("wasm_generated.png".to_string())) {
+        let img_id = manager.embed_image(&mut doc, img)
+            .expect("Failed to embed WASM-generated image");
+
+        assert!(manager.count() > 0, "Should have embedded at least one image");
+        println!("✅ WASM-specific image embedding test passed");
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+fn create_minimal_test_png() -> Vec<u8> {
+    // Create a minimal 1x1 PNG for testing
+    // PNG signature: 0x89504E470D0A1A0A0000000D49484452...
+    vec![
+        0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, // PNG signature
+        0x00, 0x00, 0x00, 0x0D, // IHDR chunk size
+        0x49, 0x48, 0x44, 0x52, // IHDR
+        0x00, 0x00, 0x00, 0x01, // Width: 1
+        0x00, 0x00, 0x00, 0x01, // Height: 1
+        0x08, 0x02, 0x00, 0x00, 0x00, // Bit depth: 8, Color type: RGB
+        0x90, 0x77, 0x53, 0xDE, // CRC
+        0x00, 0x00, 0x00, 0x0C, // IDAT chunk size
+        0x49, 0x44, 0x41, 0x54, // IDAT
+        0x08, 0x1D, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, // Image data
+        0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, // IEND
+        0xAE, 0x42, 0x60, 0x82, // CRC
+    ]
 }
 

@@ -4,7 +4,11 @@
   "license": "MIT",
   "scripts": {
     "test": "cargo test",
-    "build": "cargo build"
+    "build": "cargo build",
+    "test:wasm": "wasm-bindgen-test --chrome --headless",
+    "test:wasm:firefox": "wasm-bindgen-test --firefox --headless",
+    "test:wasm:safari": "wasm-bindgen-test --safari --headless",
+    "test:all": "npm run test && npm run test:wasm"
   },
   "devDependencies": {
     "@semantic-release/commit-analyzer": "13.0.1",
