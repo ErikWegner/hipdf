@@ -23,6 +23,7 @@ path = "src/lib.rs"
 jpeg-decoder = "0.3.2"
 miniz_oxide = "0.8.9"
 png = "0.18.0"
+ttf-parser = { version = "0.20", features = ["variable-fonts"] }
 
 # Target-specific configuration to ensure correct behavior without consumer-side feature flags
 # For non-WASM targets, use lopdf with its default native features

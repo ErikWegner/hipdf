@@ -1,10 +1,10 @@
+use hipdf::lopdf::{content::Content, dictionary, Document, Object, Stream};
 use hipdf::ocg::{Layer, LayerContentBuilder, LayerOperations as Ops, OCGConfig, OCGManager};
-use hipdf::lopdf::{Document, dictionary, Object, Stream, content::Content};
 
 fn create_layered_pdf_example() -> Result<(), Box<dyn std::error::Error>> {
     // Create a new PDF document
     let mut doc = Document::with_version("1.5");
-    
+
     // 1. Create and configure the OCG manager
     let config = OCGConfig {
         base_state: "ON".to_string(),
@@ -12,40 +12,40 @@ fn create_layered_pdf_example() -> Result<(), Box<dyn std::error::Error>> {
         intent: vec!["View".to_string(), "Design".to_string()],
     };
     let mut ocg_manager = OCGManager::with_config(config);
-    
+
     // 2. Define your layers
-    ocg_manager.add_layer(Layer::new("Background", true));     // visible by default
-    ocg_manager.add_layer(Layer::new("Main Content", true));   // visible by default  
-    ocg_manager.add_layer(Layer::new("Annotations", false));   // hidden by default
-    ocg_manager.add_layer(Layer::new("Watermark", false));     // hidden by default
-    
+    ocg_manager.add_layer(Layer::new("Background", true)); // visible by default
+    ocg_manager.add_layer(Layer::new("Main Content", true)); // visible by default
+    ocg_manager.add_layer(Layer::new("Annotations", false)); // hidden by default
+    ocg_manager.add_layer(Layer::new("Watermark", false)); // hidden by default
+
     // 3. Initialize layers in the document
     ocg_manager.initialize(&mut doc);
-    
+
     // 4. Setup document structure and fonts
     let pages_id = doc.add_object(dictionary! {
         "Type" => "Pages",
         "Count" => 1,
     });
-    
+
     let font_id = doc.add_object(dictionary! {
         "Type" => "Font",
         "Subtype" => "Type1",
         "BaseFont" => "Helvetica",
     });
-    
+
     // 5. Setup page resources
     let mut resources = dictionary! {
         "Font" => dictionary! {
             "F1" => font_id,
         },
     };
-    
+
     let layer_tags = ocg_manager.setup_page_resources(&mut resources);
-    
+
     // 6. Build the page content using LayerContentBuilder
     let mut builder = LayerContentBuilder::new();
-    
+
     // Background layer - light blue background
     if let Some(bg_tag) = layer_tags.get(&"Background".to_string()) {
         builder
@@ -55,7 +55,7 @@ fn create_layered_pdf_example() -> Result<(), Box<dyn std::error::Error>> {
             .add_operation(Ops::fill())
             .end_layer();
     }
-    
+
     // Main content layer - title and text
     if let Some(content_tag) = layer_tags.get(&"Main Content".to_string()) {
         builder
@@ -72,7 +72,7 @@ fn create_layered_pdf_example() -> Result<(), Box<dyn std::error::Error>> {
             .add_operation(Ops::fill())
             .end_layer();
     }
-    
+
     // Annotations layer - red annotations (hidden by default)
     if let Some(anno_tag) = layer_tags.get(&"Annotations".to_string()) {
         builder
@@ -88,7 +88,7 @@ fn create_layered_pdf_example() -> Result<(), Box<dyn std::error::Error>> {
             .add_operation(Ops::end_text())
             .end_layer();
     }
-    
+
     // Watermark layer - large draft text (hidden by default)
     if let Some(watermark_tag) = layer_tags.get(&"Watermark".to_string()) {
         builder
@@ -101,7 +101,7 @@ fn create_layered_pdf_example() -> Result<(), Box<dyn std::error::Error>> {
             .add_operation(Ops::end_text())
             .end_layer();
     }
-    
+
     // Content that's always visible (not in any layer)
     builder
         .add_operation(Ops::begin_text())
@@ -110,13 +110,13 @@ fn create_layered_pdf_example() -> Result<(), Box<dyn std::error::Error>> {
         .add_operation(Ops::text_position(50.0, 100.0))
         .add_operation(Ops::show_text("This text is always visible"))
         .add_operation(Ops::end_text());
-    
+
     // 7. Create the content stream
     let operations = builder.build();
     let content = Content { operations };
     let content_stream = Stream::new(dictionary! {}, content.encode()?);
     let content_id = doc.add_object(content_stream);
-    
+
     // 8. Create the page
     let page_id = doc.add_object(dictionary! {
         "Type" => "Page",
@@ -125,26 +125,27 @@ fn create_layered_pdf_example() -> Result<(), Box<dyn std::error::Error>> {
         "Contents" => content_id,
         "Resources" => resources,
     });
-    
+
     // 9. Update pages dictionary
-    let pages_dict = doc.get_object_mut(pages_id)
+    let pages_dict = doc
+        .get_object_mut(pages_id)
         .and_then(Object::as_dict_mut)
         .unwrap();
     pages_dict.set("Kids", vec![Object::Reference(page_id)]);
-    
+
     // 10. Create catalog
     let catalog_id = doc.add_object(dictionary! {
         "Type" => "Catalog",
         "Pages" => Object::Reference(pages_id),
     });
     doc.trailer.set("Root", Object::Reference(catalog_id));
-    
+
     // 11. Update the catalog with OCG properties
     ocg_manager.update_catalog(&mut doc);
-    
+
     // 12. Save the PDF
     doc.save("layered_document.pdf")?;
-    
+
     Ok(())
 }
 

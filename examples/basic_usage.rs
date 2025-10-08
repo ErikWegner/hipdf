@@ -3,8 +3,11 @@
 //! This example demonstrates the core functionality of the library
 //! including PDF creation, OCG layers, and image embedding.
 
-use hipdf::ocg::{OCGManager, Layer};
-use hipdf::lopdf::{Document, content::{Content, Operation}, dictionary};
+use hipdf::lopdf::{
+    content::{Content, Operation},
+    dictionary, Document,
+};
+use hipdf::ocg::{Layer, OCGManager};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("🚀 Creating basic PDF with hipdf...");
@@ -34,12 +37,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Add some text content
     operations.extend(vec![
         Operation::new("BT", vec![]),
-        Operation::new("Tf", vec![
-            hipdf::lopdf::Object::Name(b"F1".to_vec()),
-            12.into()
-        ]),
+        Operation::new(
+            "Tf",
+            vec![hipdf::lopdf::Object::Name(b"F1".to_vec()), 12.into()],
+        ),
         Operation::new("Td", vec![50.into(), 750.into()]),
-        Operation::new("Tj", vec![hipdf::lopdf::Object::string_literal("Hello from hipdf!")]),
+        Operation::new(
+            "Tj",
+            vec![hipdf::lopdf::Object::string_literal("Hello from hipdf!")],
+        ),
         Operation::new("ET", vec![]),
     ]);
 
@@ -81,7 +87,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "Pages" => hipdf::lopdf::Object::Reference(pages_id),
     });
 
-    doc.trailer.set("Root", hipdf::lopdf::Object::Reference(catalog_id));
+    doc.trailer
+        .set("Root", hipdf::lopdf::Object::Reference(catalog_id));
 
     // Save the document
     let output_path = "examples/basic_example.pdf";

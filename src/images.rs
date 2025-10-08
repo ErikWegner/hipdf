@@ -47,7 +47,11 @@ impl ColorSpace {
             ColorSpace::DeviceRGB => Object::Name(b"DeviceRGB".to_vec()),
             ColorSpace::DeviceGray => Object::Name(b"DeviceGray".to_vec()),
             ColorSpace::DeviceCMYK => Object::Name(b"DeviceCMYK".to_vec()),
-            ColorSpace::Indexed { base, palette, hival } => {
+            ColorSpace::Indexed {
+                base,
+                palette,
+                hival,
+            } => {
                 // Create indexed color space array
                 vec![
                     Object::Name(b"Indexed".to_vec()),
@@ -63,11 +67,11 @@ impl ColorSpace {
                     "N" => self.components() as i32,  // Number of components
                     "Filter" => "FlateDecode",
                 };
-                
+
                 let compressed = deflate::compress_to_vec_zlib(profile_data, 9);
                 let icc_stream = Stream::new(icc_dict, compressed);
                 let icc_id = doc.add_object(icc_stream);
-                
+
                 vec![
                     Object::Name(b"ICCBased".to_vec()),
                     Object::Reference(icc_id),
@@ -87,7 +91,11 @@ impl ColorSpace {
             ColorSpace::ICCBased(profile) => {
                 // Parse ICC profile to get number of components
                 // For simplicity, assuming RGB (3) or Gray (1) based on profile size
-                if profile.len() > 1000 { 3 } else { 1 }
+                if profile.len() > 1000 {
+                    3
+                } else {
+                    1
+                }
             }
         }
     }
@@ -154,7 +162,7 @@ impl Image {
         let source = Cursor::new(&data);
         let decoder = png::Decoder::new(source);
         let mut reader = decoder.read_info()?;
-        
+
         // Get image info and extract all needed data before borrowing mutably
         let info = reader.info();
         let width = info.width;
@@ -165,24 +173,28 @@ impl Image {
         // Extract palette and transparency info ahead of time as owned data
         let palette_data = info.palette.clone();
         let transparency_data = info.trns.clone();
-        let _buffer_size = reader.output_buffer_size().ok_or("Failed to get output buffer size")?;
-        
+        let _buffer_size = reader
+            .output_buffer_size()
+            .ok_or("Failed to get output buffer size")?;
+
         // Extract metadata from PNG chunks
         let mut gamma = None;
         let mut icc_profile = None;
         let mut srgb_intent = None;
-        
+
         // Parse PNG chunks for metadata
         if let Ok(png_data) = Self::extract_png_chunks(&data) {
             gamma = png_data.gamma;
             icc_profile = png_data.icc_profile;
             srgb_intent = png_data.srgb_intent;
         }
-        
+
         // Handle all PNG color types including indexed
         let (color_space, has_alpha, processed_data, alpha_data) = match color_type {
             png::ColorType::Rgb => {
-                let buffer_size = reader.output_buffer_size().ok_or("Failed to get output buffer size")?;
+                let buffer_size = reader
+                    .output_buffer_size()
+                    .ok_or("Failed to get output buffer size")?;
                 let mut img_data = vec![0u8; buffer_size];
                 reader.next_frame(&mut img_data)?;
 
@@ -202,7 +214,9 @@ impl Image {
                 (cs, false, data, None)
             }
             png::ColorType::Rgba => {
-                let buffer_size = reader.output_buffer_size().ok_or("Failed to get output buffer size")?;
+                let buffer_size = reader
+                    .output_buffer_size()
+                    .ok_or("Failed to get output buffer size")?;
                 let mut img_data = vec![0u8; buffer_size];
                 reader.next_frame(&mut img_data)?;
 
@@ -212,7 +226,8 @@ impl Image {
                     let mut rgb_data = Vec::with_capacity((img_data.len() * 3) / 4);
                     let mut alpha_data = Vec::with_capacity(img_data.len() / 4);
 
-                    for chunk in img_data.chunks_exact(8) { // 4 channels × 2 bytes
+                    for chunk in img_data.chunks_exact(8) {
+                        // 4 channels × 2 bytes
                         rgb_data.extend_from_slice(&chunk[0..2]); // R
                         rgb_data.extend_from_slice(&chunk[2..4]); // G
                         rgb_data.extend_from_slice(&chunk[4..6]); // B
@@ -244,13 +259,17 @@ impl Image {
                 (cs, true, rgb_data, alpha)
             }
             png::ColorType::Grayscale => {
-                let buffer_size = reader.output_buffer_size().ok_or("Failed to get output buffer size")?;
+                let buffer_size = reader
+                    .output_buffer_size()
+                    .ok_or("Failed to get output buffer size")?;
                 let mut img_data = vec![0u8; buffer_size];
                 reader.next_frame(&mut img_data)?;
                 (ColorSpace::DeviceGray, false, img_data, None)
             }
             png::ColorType::GrayscaleAlpha => {
-                let buffer_size = reader.output_buffer_size().ok_or("Failed to get output buffer size")?;
+                let buffer_size = reader
+                    .output_buffer_size()
+                    .ok_or("Failed to get output buffer size")?;
                 let mut img_data = vec![0u8; buffer_size];
                 reader.next_frame(&mut img_data)?;
 
@@ -282,11 +301,12 @@ impl Image {
             }
             png::ColorType::Indexed => {
                 // Handle indexed PNGs perfectly - use pre-extracted data
-                let palette = palette_data.as_ref()
-                    .ok_or("Indexed PNG missing palette")?;
+                let palette = palette_data.as_ref().ok_or("Indexed PNG missing palette")?;
 
                 // Get buffer size and read data
-                let buffer_size = reader.output_buffer_size().ok_or("Failed to get output buffer size")?;
+                let buffer_size = reader
+                    .output_buffer_size()
+                    .ok_or("Failed to get output buffer size")?;
                 let mut img_data = vec![0u8; buffer_size];
                 reader.next_frame(&mut img_data)?;
 
@@ -305,9 +325,7 @@ impl Image {
                     // Convert transparency info to alpha channel
                     let mut alpha_data = Vec::with_capacity(img_data.len());
                     for &index in &img_data {
-                        let alpha_value = trns.get(index as usize)
-                            .copied()
-                            .unwrap_or(255);
+                        let alpha_value = trns.get(index as usize).copied().unwrap_or(255);
                         alpha_data.push(alpha_value);
                     }
                     Some(alpha_data)
@@ -344,18 +362,23 @@ impl Image {
         let mut gamma = None;
         let mut icc_profile = None;
         let mut srgb_intent = None;
-        
+
         // Simple PNG chunk parser
         let mut pos = 8; // Skip PNG signature
-        
+
         while pos < data.len() - 12 {
-            let chunk_len = u32::from_be_bytes([data[pos], data[pos+1], data[pos+2], data[pos+3]]) as usize;
-            let chunk_type = &data[pos+4..pos+8];
-            
+            let chunk_len =
+                u32::from_be_bytes([data[pos], data[pos + 1], data[pos + 2], data[pos + 3]])
+                    as usize;
+            let chunk_type = &data[pos + 4..pos + 8];
+
             match chunk_type {
                 b"gAMA" if chunk_len == 4 => {
                     let gamma_int = u32::from_be_bytes([
-                        data[pos+8], data[pos+9], data[pos+10], data[pos+11]
+                        data[pos + 8],
+                        data[pos + 9],
+                        data[pos + 10],
+                        data[pos + 11],
                     ]);
                     gamma = Some(gamma_int as f32 / 100000.0);
                 }
@@ -365,12 +388,15 @@ impl Image {
                     // Find null terminator for profile name
                     if let Some(null_pos) = data[profile_start..profile_start + chunk_len]
                         .iter()
-                        .position(|&b| b == 0) {
+                        .position(|&b| b == 0)
+                    {
                         let compressed_start = profile_start + null_pos + 2; // +1 for null, +1 for compression
                         let compressed_data = &data[compressed_start..profile_start + chunk_len];
-                        
+
                         // Decompress ICC profile
-                        if let Ok(decompressed) = miniz_oxide::inflate::decompress_to_vec_zlib(compressed_data) {
+                        if let Ok(decompressed) =
+                            miniz_oxide::inflate::decompress_to_vec_zlib(compressed_data)
+                        {
                             icc_profile = Some(decompressed);
                         }
                     }
@@ -380,10 +406,10 @@ impl Image {
                 }
                 _ => {}
             }
-            
+
             pos += 12 + chunk_len; // 12 = length(4) + type(4) + crc(4)
         }
-        
+
         Ok(PngChunkData {
             gamma,
             icc_profile,
@@ -407,12 +433,12 @@ impl Image {
         // Use jpeg_decoder to get metadata
         let mut decoder = jpeg_decoder::Decoder::new(&data[..]);
         decoder.read_info()?;
-        
+
         let info = decoder.info().ok_or("Failed to read JPEG info")?;
-        
+
         // Extract ICC profile from JPEG if present
         let icc_profile = Self::extract_jpeg_icc(&data);
-        
+
         let color_space = if let Some(icc) = icc_profile.clone() {
             ColorSpace::ICCBased(icc)
         } else {
@@ -449,24 +475,24 @@ impl Image {
         // Simple JPEG APP2 parser for ICC profiles
         let mut pos = 2; // Skip SOI marker
         let mut icc_chunks = Vec::new();
-        
+
         while pos < data.len() - 4 {
             if data[pos] == 0xFF {
                 let marker = data[pos + 1];
-                
-                if marker == 0xE2 { // APP2
+
+                if marker == 0xE2 {
+                    // APP2
                     let length = u16::from_be_bytes([data[pos + 2], data[pos + 3]]) as usize;
-                    
+
                     // Check for ICC_PROFILE
-                    if pos + 4 + 14 <= data.len() && 
-                       &data[pos + 4..pos + 16] == b"ICC_PROFILE\0" {
+                    if pos + 4 + 14 <= data.len() && &data[pos + 4..pos + 16] == b"ICC_PROFILE\0" {
                         // Extract ICC chunk
                         let chunk_num = data[pos + 16];
                         let chunk_total = data[pos + 17];
                         let chunk_data = &data[pos + 18..pos + 2 + length];
-                        
+
                         icc_chunks.push((chunk_num, chunk_data.to_vec()));
-                        
+
                         if icc_chunks.len() == chunk_total as usize {
                             // Sort and combine chunks
                             icc_chunks.sort_by_key(|c| c.0);
@@ -477,11 +503,13 @@ impl Image {
                             return Some(profile);
                         }
                     }
-                    
+
                     pos += 2 + length;
-                } else if marker == 0xD9 { // EOI
+                } else if marker == 0xD9 {
+                    // EOI
                     break;
-                } else if marker >= 0xD0 && marker <= 0xD7 { // RST markers
+                } else if marker >= 0xD0 && marker <= 0xD7 {
+                    // RST markers
                     pos += 2;
                 } else if marker != 0x00 && marker != 0xFF {
                     // Other markers with length
@@ -498,7 +526,7 @@ impl Image {
                 pos += 1;
             }
         }
-        
+
         None
     }
 
@@ -532,7 +560,10 @@ impl Image {
     }
 
     /// Creates an image from bytes (for WASM compatibility)
-    pub fn from_bytes(data: Vec<u8>, source_path: Option<String>) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn from_bytes(
+        data: Vec<u8>,
+        source_path: Option<String>,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
         let format = Self::detect_format(&data)?;
 
         match format {
@@ -624,7 +655,7 @@ impl ImageManager {
             "BitsPerComponent" => image.metadata.bits_per_component as i32,
             "Filter" => "DCTDecode",
         };
-        
+
         // Set color space with ICC support
         dict.set("ColorSpace", image.metadata.color_space.to_pdf_object(doc));
 
@@ -649,7 +680,7 @@ impl ImageManager {
                 "ColorSpace" => "DeviceGray",
                 "Filter" => "FlateDecode",
             };
-            
+
             // Add decode array for proper alpha interpretation
             if image.metadata.bits_per_component == 16 {
                 mask_dict.set("Decode", vec![0.into(), 1.into()]);
@@ -674,7 +705,7 @@ impl ImageManager {
             "BitsPerComponent" => image.metadata.bits_per_component as i32,
             "Filter" => "FlateDecode",
         };
-        
+
         // Set color space with full support
         dict.set("ColorSpace", image.metadata.color_space.to_pdf_object(doc));
 
@@ -696,21 +727,19 @@ impl ImageManager {
                 }
                 _ => dictionary! {},
             };
-            
+
             if !cal_dict.is_empty() {
                 let cal_id = doc.add_object(cal_dict);
                 let cal_space = match image.metadata.color_space {
-                    ColorSpace::DeviceRGB => vec![
-                        Object::Name(b"CalRGB".to_vec()),
-                        Object::Reference(cal_id),
-                    ],
-                    ColorSpace::DeviceGray => vec![
-                        Object::Name(b"CalGray".to_vec()),
-                        Object::Reference(cal_id),
-                    ],
+                    ColorSpace::DeviceRGB => {
+                        vec![Object::Name(b"CalRGB".to_vec()), Object::Reference(cal_id)]
+                    }
+                    ColorSpace::DeviceGray => {
+                        vec![Object::Name(b"CalGray".to_vec()), Object::Reference(cal_id)]
+                    }
                     _ => vec![],
                 };
-                
+
                 if !cal_space.is_empty() {
                     dict.set("ColorSpace", cal_space);
                 }
@@ -719,10 +748,17 @@ impl ImageManager {
 
         // Add decode array for proper color interpretation
         match image.metadata.color_space {
-            ColorSpace::DeviceRGB | ColorSpace::ICCBased(_) if image.metadata.color_space.components() == 3 => {
-                dict.set("Decode", vec![0.into(), 1.into(), 0.into(), 1.into(), 0.into(), 1.into()]);
+            ColorSpace::DeviceRGB | ColorSpace::ICCBased(_)
+                if image.metadata.color_space.components() == 3 =>
+            {
+                dict.set(
+                    "Decode",
+                    vec![0.into(), 1.into(), 0.into(), 1.into(), 0.into(), 1.into()],
+                );
             }
-            ColorSpace::DeviceGray | ColorSpace::ICCBased(_) if image.metadata.color_space.components() == 1 => {
+            ColorSpace::DeviceGray | ColorSpace::ICCBased(_)
+                if image.metadata.color_space.components() == 1 =>
+            {
                 dict.set("Decode", vec![0.into(), 1.into()]);
             }
             ColorSpace::Indexed { .. } => {
@@ -762,11 +798,7 @@ impl ImageManager {
     }
 
     /// Adds an image to page resources and returns its resource name
-    pub fn add_to_resources(
-        &mut self,
-        resources: &mut Dictionary,
-        image_id: ObjectId,
-    ) -> String {
+    pub fn add_to_resources(&mut self, resources: &mut Dictionary, image_id: ObjectId) -> String {
         let name = format!("Im{}", self.name_counter);
         self.name_counter += 1;
 
@@ -835,20 +867,41 @@ impl ImageManager {
         vec![
             Operation::new("q", vec![]),
             // Translate to center
-            Operation::new("cm", vec![
-                1.0.into(), 0.0.into(), 0.0.into(), 1.0.into(),
-                cx.into(), cy.into(),
-            ]),
+            Operation::new(
+                "cm",
+                vec![
+                    1.0.into(),
+                    0.0.into(),
+                    0.0.into(),
+                    1.0.into(),
+                    cx.into(),
+                    cy.into(),
+                ],
+            ),
             // Rotate
-            Operation::new("cm", vec![
-                cos.into(), sin.into(), (-sin).into(), cos.into(),
-                0.0.into(), 0.0.into(),
-            ]),
+            Operation::new(
+                "cm",
+                vec![
+                    cos.into(),
+                    sin.into(),
+                    (-sin).into(),
+                    cos.into(),
+                    0.0.into(),
+                    0.0.into(),
+                ],
+            ),
             // Scale and translate back
-            Operation::new("cm", vec![
-                width.into(), 0.0.into(), 0.0.into(), height.into(),
-                (-width / 2.0).into(), (-height / 2.0).into(),
-            ]),
+            Operation::new(
+                "cm",
+                vec![
+                    width.into(),
+                    0.0.into(),
+                    0.0.into(),
+                    height.into(),
+                    (-width / 2.0).into(),
+                    (-height / 2.0).into(),
+                ],
+            ),
             Self::create_draw_operation(resource_name),
             Operation::new("Q", vec![]),
         ]
@@ -864,7 +917,7 @@ impl ImageManager {
         max_height: f32,
     ) -> Vec<Operation> {
         let aspect = image.aspect_ratio();
-        
+
         let (width, height) = if max_width / max_height > aspect {
             // Height is the limiting factor
             (max_height * aspect, max_height)
@@ -925,13 +978,8 @@ impl ImageBuilder {
         width: f32,
         height: f32,
     ) -> Self {
-        self.operations.extend(ImageManager::draw_image(
-            resource_name,
-            x,
-            y,
-            width,
-            height,
-        ));
+        self.operations
+            .extend(ImageManager::draw_image(resource_name, x, y, width, height));
         self
     }
 

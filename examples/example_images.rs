@@ -1,5 +1,5 @@
 use hipdf::images::{Image, ImageManager};
-use hipdf::lopdf::{Document, dictionary, Object, Stream, content::Content};
+use hipdf::lopdf::{content::Content, dictionary, Document, Object, Stream};
 
 fn create_image_showcase_example() -> Result<(), Box<dyn std::error::Error>> {
     // Create a new PDF document
@@ -23,17 +23,44 @@ fn create_image_showcase_example() -> Result<(), Box<dyn std::error::Error>> {
     let jpeg_print = Image::from_file("tests/assets/print.jpeg")?;
 
     println!("✅ All images loaded successfully!");
-    println!("PNG RGB: {}x{} pixels", png_rgb.metadata.width, png_rgb.metadata.height);
-    println!("PNG Indexed: {}x{} pixels", png_indexed.metadata.width, png_indexed.metadata.height);
-    println!("PNG 16-bit: {}x{} pixels", png_16bit.metadata.width, png_16bit.metadata.height);
-    println!("PNG sRGB: {}x{} pixels", png_srgb.metadata.width, png_srgb.metadata.height);
-    println!("PNG Transparent: {}x{} pixels", png_transparent.metadata.width, png_transparent.metadata.height);
-    println!("JPEG Standard: {}x{} pixels", jpeg_standard.metadata.width, jpeg_standard.metadata.height);
-    println!("JPEG Print: {}x{} pixels", jpeg_print.metadata.width, jpeg_print.metadata.height);
+    println!(
+        "PNG RGB: {}x{} pixels",
+        png_rgb.metadata.width, png_rgb.metadata.height
+    );
+    println!(
+        "PNG Indexed: {}x{} pixels",
+        png_indexed.metadata.width, png_indexed.metadata.height
+    );
+    println!(
+        "PNG 16-bit: {}x{} pixels",
+        png_16bit.metadata.width, png_16bit.metadata.height
+    );
+    println!(
+        "PNG sRGB: {}x{} pixels",
+        png_srgb.metadata.width, png_srgb.metadata.height
+    );
+    println!(
+        "PNG Transparent: {}x{} pixels",
+        png_transparent.metadata.width, png_transparent.metadata.height
+    );
+    println!(
+        "JPEG Standard: {}x{} pixels",
+        jpeg_standard.metadata.width, jpeg_standard.metadata.height
+    );
+    println!(
+        "JPEG Print: {}x{} pixels",
+        jpeg_print.metadata.width, jpeg_print.metadata.height
+    );
 
     // Store images for later use in drawing (before embedding)
     let images = vec![
-        png_rgb.clone(), png_indexed.clone(), png_16bit.clone(), png_srgb.clone(), png_transparent.clone(), jpeg_standard.clone(), jpeg_print.clone()
+        png_rgb.clone(),
+        png_indexed.clone(),
+        png_16bit.clone(),
+        png_srgb.clone(),
+        png_transparent.clone(),
+        jpeg_standard.clone(),
+        jpeg_print.clone(),
     ];
 
     // Embed all images in the document (with caching)
@@ -77,36 +104,82 @@ fn create_image_showcase_example() -> Result<(), Box<dyn std::error::Error>> {
     let img6_name = image_manager.add_to_resources(&mut resources, img6_id);
     let img7_name = image_manager.add_to_resources(&mut resources, img7_id);
 
-    let image_names = vec![img1_name.clone(), img2_name.clone(), img3_name.clone(), img4_name.clone(), img5_name.clone(), img6_name.clone(), img7_name.clone()];
+    let image_names = vec![
+        img1_name.clone(),
+        img2_name.clone(),
+        img3_name.clone(),
+        img4_name.clone(),
+        img5_name.clone(),
+        img6_name.clone(),
+        img7_name.clone(),
+    ];
 
     // Build page content with various image demonstrations
-    let mut content = Content { operations: Vec::new() };
+    let mut content = Content {
+        operations: Vec::new(),
+    };
 
     // Set font for text labels
-    content.operations.push(lopdf::content::Operation::new("BT", vec![]));
-    content.operations.push(lopdf::content::Operation::new("F1", vec![Object::Integer(12)]));
-    content.operations.push(lopdf::content::Operation::new("Tm", vec![
-        Object::Integer(1), Object::Integer(0), Object::Integer(0), Object::Integer(1),
-        Object::Integer(50), Object::Integer(800)
-    ]));
+    content
+        .operations
+        .push(lopdf::content::Operation::new("BT", vec![]));
+    content.operations.push(lopdf::content::Operation::new(
+        "F1",
+        vec![Object::Integer(12)],
+    ));
+    content.operations.push(lopdf::content::Operation::new(
+        "Tm",
+        vec![
+            Object::Integer(1),
+            Object::Integer(0),
+            Object::Integer(0),
+            Object::Integer(1),
+            Object::Integer(50),
+            Object::Integer(800),
+        ],
+    ));
 
     // Add title
-    content.operations.push(lopdf::content::Operation::new("Tj", vec![
-        Object::String(b"HiPDF Image Quality Showcase - 100% Quality Preservation".to_vec(), lopdf::StringFormat::Literal)
-    ]));
-    content.operations.push(lopdf::content::Operation::new("ET", vec![]));
+    content.operations.push(lopdf::content::Operation::new(
+        "Tj",
+        vec![Object::String(
+            b"HiPDF Image Quality Showcase - 100% Quality Preservation".to_vec(),
+            lopdf::StringFormat::Literal,
+        )],
+    ));
+    content
+        .operations
+        .push(lopdf::content::Operation::new("ET", vec![]));
 
     // Section 1: PNG Images
-    content.operations.push(lopdf::content::Operation::new("BT", vec![]));
-    content.operations.push(lopdf::content::Operation::new("F1", vec![Object::Integer(14)]));
-    content.operations.push(lopdf::content::Operation::new("Tm", vec![
-        Object::Integer(1), Object::Integer(0), Object::Integer(0), Object::Integer(1),
-        Object::Integer(50), Object::Integer(750)
-    ]));
-    content.operations.push(lopdf::content::Operation::new("Tj", vec![
-        Object::String(b"PNG Images - Perfect Quality Preservation".to_vec(), lopdf::StringFormat::Literal)
-    ]));
-    content.operations.push(lopdf::content::Operation::new("ET", vec![]));
+    content
+        .operations
+        .push(lopdf::content::Operation::new("BT", vec![]));
+    content.operations.push(lopdf::content::Operation::new(
+        "F1",
+        vec![Object::Integer(14)],
+    ));
+    content.operations.push(lopdf::content::Operation::new(
+        "Tm",
+        vec![
+            Object::Integer(1),
+            Object::Integer(0),
+            Object::Integer(0),
+            Object::Integer(1),
+            Object::Integer(50),
+            Object::Integer(750),
+        ],
+    ));
+    content.operations.push(lopdf::content::Operation::new(
+        "Tj",
+        vec![Object::String(
+            b"PNG Images - Perfect Quality Preservation".to_vec(),
+            lopdf::StringFormat::Literal,
+        )],
+    ));
+    content
+        .operations
+        .push(lopdf::content::Operation::new("ET", vec![]));
 
     // Draw PNG images with labels
     let png_images = vec![
@@ -120,32 +193,70 @@ fn create_image_showcase_example() -> Result<(), Box<dyn std::error::Error>> {
         let img = &images[img_idx];
 
         // Add label
-        content.operations.push(lopdf::content::Operation::new("BT", vec![]));
-        content.operations.push(lopdf::content::Operation::new("F1", vec![Object::Integer(10)]));
-        content.operations.push(lopdf::content::Operation::new("Tm", vec![
-            Object::Integer(1), Object::Integer(0), Object::Integer(0), Object::Integer(1),
-            Object::Real(x), Object::Real(y - 15.0)
-        ]));
-        content.operations.push(lopdf::content::Operation::new("Tj", vec![
-            Object::String(label.as_bytes().to_vec(), lopdf::StringFormat::Literal)
-        ]));
-        content.operations.push(lopdf::content::Operation::new("ET", vec![]));
+        content
+            .operations
+            .push(lopdf::content::Operation::new("BT", vec![]));
+        content.operations.push(lopdf::content::Operation::new(
+            "F1",
+            vec![Object::Integer(10)],
+        ));
+        content.operations.push(lopdf::content::Operation::new(
+            "Tm",
+            vec![
+                Object::Integer(1),
+                Object::Integer(0),
+                Object::Integer(0),
+                Object::Integer(1),
+                Object::Real(x),
+                Object::Real(y - 15.0),
+            ],
+        ));
+        content.operations.push(lopdf::content::Operation::new(
+            "Tj",
+            vec![Object::String(
+                label.as_bytes().to_vec(),
+                lopdf::StringFormat::Literal,
+            )],
+        ));
+        content
+            .operations
+            .push(lopdf::content::Operation::new("ET", vec![]));
 
         // Draw image
-        content.operations.extend(ImageManager::draw_image_fit(img_name, img, x, y, w, h));
+        content
+            .operations
+            .extend(ImageManager::draw_image_fit(img_name, img, x, y, w, h));
     }
 
     // Section 2: Special PNG Features
-    content.operations.push(lopdf::content::Operation::new("BT", vec![]));
-    content.operations.push(lopdf::content::Operation::new("F1", vec![Object::Integer(14)]));
-    content.operations.push(lopdf::content::Operation::new("Tm", vec![
-        Object::Integer(1), Object::Integer(0), Object::Integer(0), Object::Integer(1),
-        Object::Integer(50), Object::Integer(500)
-    ]));
-    content.operations.push(lopdf::content::Operation::new("Tj", vec![
-        Object::String(b"Special PNG Features - ICC Profiles & Transparency".to_vec(), lopdf::StringFormat::Literal)
-    ]));
-    content.operations.push(lopdf::content::Operation::new("ET", vec![]));
+    content
+        .operations
+        .push(lopdf::content::Operation::new("BT", vec![]));
+    content.operations.push(lopdf::content::Operation::new(
+        "F1",
+        vec![Object::Integer(14)],
+    ));
+    content.operations.push(lopdf::content::Operation::new(
+        "Tm",
+        vec![
+            Object::Integer(1),
+            Object::Integer(0),
+            Object::Integer(0),
+            Object::Integer(1),
+            Object::Integer(50),
+            Object::Integer(500),
+        ],
+    ));
+    content.operations.push(lopdf::content::Operation::new(
+        "Tj",
+        vec![Object::String(
+            b"Special PNG Features - ICC Profiles & Transparency".to_vec(),
+            lopdf::StringFormat::Literal,
+        )],
+    ));
+    content
+        .operations
+        .push(lopdf::content::Operation::new("ET", vec![]));
 
     // Draw special PNG images
     let special_images = vec![
@@ -158,32 +269,70 @@ fn create_image_showcase_example() -> Result<(), Box<dyn std::error::Error>> {
         let img = &images[img_idx];
 
         // Add label
-        content.operations.push(lopdf::content::Operation::new("BT", vec![]));
-        content.operations.push(lopdf::content::Operation::new("F1", vec![Object::Integer(10)]));
-        content.operations.push(lopdf::content::Operation::new("Tm", vec![
-            Object::Integer(1), Object::Integer(0), Object::Integer(0), Object::Integer(1),
-            Object::Real(x), Object::Real(y - 15.0)
-        ]));
-        content.operations.push(lopdf::content::Operation::new("Tj", vec![
-            Object::String(label.as_bytes().to_vec(), lopdf::StringFormat::Literal)
-        ]));
-        content.operations.push(lopdf::content::Operation::new("ET", vec![]));
+        content
+            .operations
+            .push(lopdf::content::Operation::new("BT", vec![]));
+        content.operations.push(lopdf::content::Operation::new(
+            "F1",
+            vec![Object::Integer(10)],
+        ));
+        content.operations.push(lopdf::content::Operation::new(
+            "Tm",
+            vec![
+                Object::Integer(1),
+                Object::Integer(0),
+                Object::Integer(0),
+                Object::Integer(1),
+                Object::Real(x),
+                Object::Real(y - 15.0),
+            ],
+        ));
+        content.operations.push(lopdf::content::Operation::new(
+            "Tj",
+            vec![Object::String(
+                label.as_bytes().to_vec(),
+                lopdf::StringFormat::Literal,
+            )],
+        ));
+        content
+            .operations
+            .push(lopdf::content::Operation::new("ET", vec![]));
 
         // Draw image
-        content.operations.extend(ImageManager::draw_image_fit(img_name, img, x, y, w, h));
+        content
+            .operations
+            .extend(ImageManager::draw_image_fit(img_name, img, x, y, w, h));
     }
 
     // Section 3: JPEG Images
-    content.operations.push(lopdf::content::Operation::new("BT", vec![]));
-    content.operations.push(lopdf::content::Operation::new("F1", vec![Object::Integer(14)]));
-    content.operations.push(lopdf::content::Operation::new("Tm", vec![
-        Object::Integer(1), Object::Integer(0), Object::Integer(0), Object::Integer(1),
-        Object::Integer(50), Object::Integer(250)
-    ]));
-    content.operations.push(lopdf::content::Operation::new("Tj", vec![
-        Object::String(b"JPEG Images - Optimized Compression".to_vec(), lopdf::StringFormat::Literal)
-    ]));
-    content.operations.push(lopdf::content::Operation::new("ET", vec![]));
+    content
+        .operations
+        .push(lopdf::content::Operation::new("BT", vec![]));
+    content.operations.push(lopdf::content::Operation::new(
+        "F1",
+        vec![Object::Integer(14)],
+    ));
+    content.operations.push(lopdf::content::Operation::new(
+        "Tm",
+        vec![
+            Object::Integer(1),
+            Object::Integer(0),
+            Object::Integer(0),
+            Object::Integer(1),
+            Object::Integer(50),
+            Object::Integer(250),
+        ],
+    ));
+    content.operations.push(lopdf::content::Operation::new(
+        "Tj",
+        vec![Object::String(
+            b"JPEG Images - Optimized Compression".to_vec(),
+            lopdf::StringFormat::Literal,
+        )],
+    ));
+    content
+        .operations
+        .push(lopdf::content::Operation::new("ET", vec![]));
 
     // Draw JPEG images
     let jpeg_images = vec![
@@ -196,32 +345,66 @@ fn create_image_showcase_example() -> Result<(), Box<dyn std::error::Error>> {
         let img = &images[img_idx];
 
         // Add label
-        content.operations.push(lopdf::content::Operation::new("BT", vec![]));
-        content.operations.push(lopdf::content::Operation::new("F1", vec![Object::Integer(10)]));
-        content.operations.push(lopdf::content::Operation::new("Tm", vec![
-            Object::Integer(1), Object::Integer(0), Object::Integer(0), Object::Integer(1),
-            Object::Real(x), Object::Real(y - 15.0)
-        ]));
-        content.operations.push(lopdf::content::Operation::new("Tj", vec![
-            Object::String(label.as_bytes().to_vec(), lopdf::StringFormat::Literal)
-        ]));
-        content.operations.push(lopdf::content::Operation::new("ET", vec![]));
+        content
+            .operations
+            .push(lopdf::content::Operation::new("BT", vec![]));
+        content.operations.push(lopdf::content::Operation::new(
+            "F1",
+            vec![Object::Integer(10)],
+        ));
+        content.operations.push(lopdf::content::Operation::new(
+            "Tm",
+            vec![
+                Object::Integer(1),
+                Object::Integer(0),
+                Object::Integer(0),
+                Object::Integer(1),
+                Object::Real(x),
+                Object::Real(y - 15.0),
+            ],
+        ));
+        content.operations.push(lopdf::content::Operation::new(
+            "Tj",
+            vec![Object::String(
+                label.as_bytes().to_vec(),
+                lopdf::StringFormat::Literal,
+            )],
+        ));
+        content
+            .operations
+            .push(lopdf::content::Operation::new("ET", vec![]));
 
         // Draw image
-        content.operations.extend(ImageManager::draw_image_fit(img_name, img, x, y, w, h));
+        content
+            .operations
+            .extend(ImageManager::draw_image_fit(img_name, img, x, y, w, h));
     }
 
     // Add quality preservation note
-    content.operations.push(lopdf::content::Operation::new("BT", vec![]));
-    content.operations.push(lopdf::content::Operation::new("F1", vec![Object::Integer(10)]));
-    content.operations.push(lopdf::content::Operation::new("Tm", vec![
-        Object::Integer(1), Object::Integer(0), Object::Integer(0), Object::Integer(1),
-        Object::Integer(50), Object::Integer(50)
-    ]));
+    content
+        .operations
+        .push(lopdf::content::Operation::new("BT", vec![]));
+    content.operations.push(lopdf::content::Operation::new(
+        "F1",
+        vec![Object::Integer(10)],
+    ));
+    content.operations.push(lopdf::content::Operation::new(
+        "Tm",
+        vec![
+            Object::Integer(1),
+            Object::Integer(0),
+            Object::Integer(0),
+            Object::Integer(1),
+            Object::Integer(50),
+            Object::Integer(50),
+        ],
+    ));
     content.operations.push(lopdf::content::Operation::new("Tj", vec![
         Object::String(b"Note: All images embedded with 100% quality preservation - no lossy compression applied!".to_vec(), lopdf::StringFormat::Literal)
     ]));
-    content.operations.push(lopdf::content::Operation::new("ET", vec![]));
+    content
+        .operations
+        .push(lopdf::content::Operation::new("ET", vec![]));
 
     // Create the page
     let content_stream = Stream::new(dictionary! {}, content.encode()?);
@@ -236,7 +419,8 @@ fn create_image_showcase_example() -> Result<(), Box<dyn std::error::Error>> {
     });
 
     // Finalize document structure
-    let pages_dict = doc.get_object_mut(pages_id)
+    let pages_dict = doc
+        .get_object_mut(pages_id)
         .and_then(Object::as_dict_mut)
         .unwrap();
     pages_dict.set("Kids", vec![Object::Reference(page_id)]);

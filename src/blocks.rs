@@ -4,7 +4,10 @@
 //! Blocks contain raw lopdf operations that can be instantiated multiple times with
 //! different transformations.
 
-use lopdf::{content::{Content, Operation}, Dictionary, Document, Object, ObjectId, Stream, dictionary};
+use lopdf::{
+    content::{Content, Operation},
+    dictionary, Dictionary, Document, Object, ObjectId, Stream,
+};
 use std::collections::HashMap;
 use std::f32::consts::PI;
 
@@ -263,19 +266,19 @@ impl BlockManager {
     pub fn render_instance(&self, instance: &BlockInstance) -> Vec<Operation> {
         if let Some(block) = self.blocks.get(&instance.block_id) {
             let mut ops = Vec::new();
-            
+
             // Save graphics state
             ops.push(Operation::new("q", vec![]));
-            
+
             // Apply transformation
             ops.push(instance.transform.to_operation());
-            
+
             // Add block operations
             ops.extend(block.operations.clone());
-            
+
             // Restore graphics state
             ops.push(Operation::new("Q", vec![]));
-            
+
             ops
         } else {
             Vec::new()
@@ -311,7 +314,10 @@ impl BlockManager {
 
         // Set bounding box
         if let Some((x, y, w, h)) = block.bbox {
-            dict.set("BBox", vec![x.into(), y.into(), (x + w).into(), (y + h).into()]);
+            dict.set(
+                "BBox",
+                vec![x.into(), y.into(), (x + w).into(), (y + h).into()],
+            );
         } else {
             dict.set("BBox", vec![0.into(), 0.into(), 100.into(), 100.into()]);
         }
@@ -322,7 +328,9 @@ impl BlockManager {
         }
 
         // Create content from operations
-        let content = Content { operations: block.operations.clone() };
+        let content = Content {
+            operations: block.operations.clone(),
+        };
         let stream = Stream::new(dict, content.encode().unwrap());
         doc.add_object(stream)
     }

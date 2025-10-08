@@ -10,8 +10,8 @@
 //! - Full PDF generation with OCG support
 //! - Performance and edge cases
 
-use hipdf::ocg::{Layer, LayerContentBuilder, LayerOperations as Ops, OCGConfig, OCGManager};
 use hipdf::lopdf::{content::Content, dictionary, Document, Object, Stream};
+use hipdf::ocg::{Layer, LayerContentBuilder, LayerOperations as Ops, OCGConfig, OCGManager};
 
 use std::fs;
 use std::path::Path;

@@ -36,12 +36,14 @@
 //! - [`embed_pdf`] - Embedding existing PDF documents
 //! - [`blocks`] - Block content management
 //! - [`images`] - Image embedding and manipulation
+//! - [`fonts`] - Font management and embedding
 
-pub mod embed_pdf;
-pub mod hatching;
-pub mod ocg;
 pub mod blocks;
+pub mod embed_pdf;
+pub mod fonts;
+pub mod hatching;
 pub mod images;
+pub mod ocg;
 
 pub use lopdf;
 

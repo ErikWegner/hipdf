@@ -2,8 +2,11 @@
 //!
 //! Tests for the block registration and instancing system.
 
-use hipdf::blocks::{Block, BlockInstance, BlockManager, Transform, merge_blocks};
-use hipdf::lopdf::{content::{Content, Operation}, dictionary, Dictionary, Document, Object, Stream};
+use hipdf::blocks::{merge_blocks, Block, BlockInstance, BlockManager, Transform};
+use hipdf::lopdf::{
+    content::{Content, Operation},
+    dictionary, Dictionary, Document, Object, Stream,
+};
 
 use std::fs;
 use std::path::Path;
@@ -48,9 +51,8 @@ fn test_block_creation() {
     let block = Block::new("test_block", ops.clone());
     assert_eq!(block.id, "test_block");
     assert_eq!(block.operations.len(), 3);
-    
-    let block_with_bbox = Block::new("test_block2", ops)
-        .with_bbox(0.0, 0.0, 50.0, 50.0);
+
+    let block_with_bbox = Block::new("test_block2", ops).with_bbox(0.0, 0.0, 50.0, 50.0);
     assert_eq!(block_with_bbox.bbox, Some((0.0, 0.0, 50.0, 50.0)));
 }
 
@@ -66,11 +68,17 @@ fn test_block_manager() {
 
     let circle_ops = vec![
         Operation::new("m", vec![25.0.into(), 0.0.into()]),
-        Operation::new("c", vec![
-            25.0.into(), 13.807.into(),
-            13.807.into(), 25.0.into(),
-            0.0.into(), 25.0.into(),
-        ]),
+        Operation::new(
+            "c",
+            vec![
+                25.0.into(),
+                13.807.into(),
+                13.807.into(),
+                25.0.into(),
+                0.0.into(),
+                25.0.into(),
+            ],
+        ),
         Operation::new("f", vec![]),
     ];
 
@@ -148,21 +156,19 @@ fn test_render_multiple_instances() {
     ];
 
     let rendered_ops = manager.render_instances(&instances);
-    
+
     // Each instance: q, cm, 2 ops, Q = 5 ops per instance
     assert_eq!(rendered_ops.len(), 20);
 }
 
 #[test]
 fn test_merge_blocks() {
-    let block1 = Block::new("b1", vec![
-        Operation::new("q", vec![]),
-        Operation::new("Q", vec![]),
-    ]);
+    let block1 = Block::new(
+        "b1",
+        vec![Operation::new("q", vec![]), Operation::new("Q", vec![])],
+    );
 
-    let block2 = Block::new("b2", vec![
-        Operation::new("f", vec![]),
-    ]);
+    let block2 = Block::new("b2", vec![Operation::new("f", vec![])]);
 
     let merged = merge_blocks(&[&block1, &block2]);
     assert_eq!(merged.len(), 3);
@@ -203,26 +209,50 @@ fn test_blocks_integration() {
         // Blue background circle
         Operation::new("rg", vec![0.2.into(), 0.4.into(), 0.8.into()]),
         Operation::new("m", vec![50.0.into(), 5.0.into()]),
-        Operation::new("c", vec![
-            72.0.into(), 5.0.into(),
-            90.0.into(), 23.0.into(),
-            90.0.into(), 45.0.into(),
-        ]),
-        Operation::new("c", vec![
-            90.0.into(), 67.0.into(),
-            72.0.into(), 85.0.into(),
-            50.0.into(), 85.0.into(),
-        ]),
-        Operation::new("c", vec![
-            28.0.into(), 85.0.into(),
-            10.0.into(), 67.0.into(),
-            10.0.into(), 45.0.into(),
-        ]),
-        Operation::new("c", vec![
-            10.0.into(), 23.0.into(),
-            28.0.into(), 5.0.into(),
-            50.0.into(), 5.0.into(),
-        ]),
+        Operation::new(
+            "c",
+            vec![
+                72.0.into(),
+                5.0.into(),
+                90.0.into(),
+                23.0.into(),
+                90.0.into(),
+                45.0.into(),
+            ],
+        ),
+        Operation::new(
+            "c",
+            vec![
+                90.0.into(),
+                67.0.into(),
+                72.0.into(),
+                85.0.into(),
+                50.0.into(),
+                85.0.into(),
+            ],
+        ),
+        Operation::new(
+            "c",
+            vec![
+                28.0.into(),
+                85.0.into(),
+                10.0.into(),
+                67.0.into(),
+                10.0.into(),
+                45.0.into(),
+            ],
+        ),
+        Operation::new(
+            "c",
+            vec![
+                10.0.into(),
+                23.0.into(),
+                28.0.into(),
+                5.0.into(),
+                50.0.into(),
+                5.0.into(),
+            ],
+        ),
         Operation::new("f", vec![]),
         // White inner shape
         Operation::new("rg", vec![1.0.into(), 1.0.into(), 1.0.into()]),
@@ -300,33 +330,31 @@ fn test_blocks_integration() {
         BlockInstance::at_scaled("logo", 180.0, 700.0, 0.7),
         BlockInstance::at_scaled("logo", 280.0, 700.0, 0.5),
         BlockInstance::at_scaled("logo", 350.0, 700.0, 1.2),
-        
         // Arrows pointing different directions
         BlockInstance::new("arrow", Transform::translate(50.0, 600.0)),
         BlockInstance::new("arrow", Transform::full(150.0, 600.0, 1.0, 1.0, 45.0)),
         BlockInstance::new("arrow", Transform::full(250.0, 600.0, 1.0, 1.0, 90.0)),
         BlockInstance::new("arrow", Transform::full(350.0, 600.0, 1.0, 1.0, 180.0)),
         BlockInstance::new("arrow", Transform::full(450.0, 600.0, 1.0, 1.0, 270.0)),
-        
         // Grid of stars
         BlockInstance::at("star", 50.0, 500.0),
         BlockInstance::at("star", 110.0, 500.0),
         BlockInstance::at("star", 170.0, 500.0),
         BlockInstance::at("star", 230.0, 500.0),
         BlockInstance::at("star", 290.0, 500.0),
-        
         // Stars with different scales
         BlockInstance::at_scaled("star", 50.0, 420.0, 0.5),
         BlockInstance::at_scaled("star", 110.0, 420.0, 0.75),
         BlockInstance::at_scaled("star", 170.0, 420.0, 1.0),
         BlockInstance::at_scaled("star", 230.0, 420.0, 1.25),
         BlockInstance::at_scaled("star", 290.0, 420.0, 1.5),
-        
         // Labels at different positions and scales
         BlockInstance::at("label", 50.0, 350.0),
         BlockInstance::at_scaled("label", 150.0, 350.0, 1.5),
-        BlockInstance::new("label", Transform::translate_scale_xy(280.0, 350.0, 2.0, 1.0)),
-        
+        BlockInstance::new(
+            "label",
+            Transform::translate_scale_xy(280.0, 350.0, 2.0, 1.0),
+        ),
         // Complex transformations
         BlockInstance::new("logo", Transform::full(100.0, 200.0, 0.8, 1.2, 30.0)),
         BlockInstance::new("star", Transform::full(250.0, 200.0, 2.0, 2.0, 15.0)),
@@ -338,16 +366,30 @@ fn test_blocks_integration() {
 
     // Add title
     all_operations.push(Operation::new("BT", vec![]));
-    all_operations.push(Operation::new("Tf", vec![Object::Name(b"F1".to_vec()), 24.0.into()]));
+    all_operations.push(Operation::new(
+        "Tf",
+        vec![Object::Name(b"F1".to_vec()), 24.0.into()],
+    ));
     all_operations.push(Operation::new("Td", vec![50.0.into(), 800.0.into()]));
-    all_operations.push(Operation::new("Tj", vec![Object::string_literal("PDF Block System Demo")]));
+    all_operations.push(Operation::new(
+        "Tj",
+        vec![Object::string_literal("PDF Block System Demo")],
+    ));
     all_operations.push(Operation::new("ET", vec![]));
 
     // Add subtitle
     all_operations.push(Operation::new("BT", vec![]));
-    all_operations.push(Operation::new("Tf", vec![Object::Name(b"F1".to_vec()), 12.0.into()]));
+    all_operations.push(Operation::new(
+        "Tf",
+        vec![Object::Name(b"F1".to_vec()), 12.0.into()],
+    ));
     all_operations.push(Operation::new("Td", vec![50.0.into(), 780.0.into()]));
-    all_operations.push(Operation::new("Tj", vec![Object::string_literal("Reusable PDF content blocks with multiple instances")]));
+    all_operations.push(Operation::new(
+        "Tj",
+        vec![Object::string_literal(
+            "Reusable PDF content blocks with multiple instances",
+        )],
+    ));
     all_operations.push(Operation::new("ET", vec![]));
 
     // Render instances using XObjects
@@ -362,7 +404,9 @@ fn test_blocks_integration() {
     all_operations.extend(block_manager.render_instances(&direct_instances));
 
     // Create content stream
-    let content = Content { operations: all_operations };
+    let content = Content {
+        operations: all_operations,
+    };
     let content_stream = Stream::new(dictionary! {}, content.encode().unwrap());
     let content_id = doc.add_object(content_stream);
 
@@ -423,7 +467,7 @@ fn test_xobject_creation() {
     ];
 
     manager.register(Block::new("magenta_square", ops).with_bbox(0.0, 0.0, 50.0, 50.0));
-    
+
     // Create XObjects
     manager.create_xobjects(&mut doc);
 
@@ -459,8 +503,7 @@ fn test_block_with_resources() {
         Operation::new("ET", vec![]),
     ];
 
-    let block = Block::new("text_block", ops)
-        .with_resources(resources.clone());
+    let block = Block::new("text_block", ops).with_resources(resources.clone());
 
     assert!(block.resources.is_some());
     assert_eq!(block.resources.unwrap(), resources);
