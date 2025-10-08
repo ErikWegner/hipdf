@@ -13,6 +13,7 @@ A high-level PDF manipulation library built on [lopdf](https://github.com/j-f-li
 - **PDF Embedding**: Embed other PDF documents with various layout strategies
 - **Block System**: Reusable PDF content components with transformations and efficient rendering
 - **Image Embedding**: Support for PNG and JPEG images
+- **Font Management**: Easy embedding and management of fonts
 - **Type Safety**: Strongly typed interfaces with compile-time guarantees
 
 # Showcase
@@ -28,7 +29,7 @@ use hipdf::ocg::{OCGManager, Layer, LayerContentBuilder, LayerOperations as Ops}
 use hipdf::lopdf::{Document, Object};
 
 // Create a new PDF with layers
-let mut doc = Document::with_version("1.5");
+let mut doc = Document::with_version("1.7");
 let mut ocg_manager = OCGManager::with_config(Default::default());
 
 // Add layers
@@ -118,6 +119,7 @@ let operations = manager.render_instances(&instances);
 - [`embed_pdf`] - PDF embedding and composition support
 - [`blocks`] - Reusable PDF content components with transformations
 - [`images`] - Image embedding and manipulation
+- [`fonts`] - Font management and embedding
 
 ## Usage Examples
 
