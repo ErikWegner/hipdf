@@ -473,6 +473,15 @@ fn test_custom_fonts_pdf() {
         700.0,
         16.0,
     );
+    add_text(
+        &mut operations,
+        &inter_font,
+        &f1,
+        "A raposa castanha rápida pula sobre o cão preguiçoso",
+        50.0,
+        680.0,
+        14.0,
+    );
 
     // JetBrains Mono font
     add_text(
@@ -481,8 +490,17 @@ fn test_custom_fonts_pdf() {
         &f2,
         "JetBrains Mono: The quick brown fox jumps over the lazy dog",
         50.0,
-        670.0,
+        650.0,
         14.0,
+    );
+    add_text(
+        &mut operations,
+        &jetbrains_font,
+        &f2,
+        "A raposa castanha rápida pula sobre o cão preguiçoso",
+        50.0,
+        630.0,
+        12.0,
     );
 
     // Roboto Mono font
@@ -492,8 +510,17 @@ fn test_custom_fonts_pdf() {
         &f3,
         "Roboto Mono: The quick brown fox jumps over the lazy dog",
         50.0,
-        640.0,
+        600.0,
         14.0,
+    );
+    add_text(
+        &mut operations,
+        &roboto_font,
+        &f3,
+        "A raposa castanha rápida pula sobre o cão preguiçoso",
+        50.0,
+        580.0,
+        12.0,
     );
 
     // Different sizes with Inter
@@ -503,7 +530,7 @@ fn test_custom_fonts_pdf() {
         &f1,
         "10pt Inter: Small text with custom font",
         50.0,
-        590.0,
+        540.0,
         10.0,
     );
     add_text(
@@ -512,7 +539,7 @@ fn test_custom_fonts_pdf() {
         &f1,
         "14pt Inter: Normal text with custom font",
         50.0,
-        570.0,
+        520.0,
         14.0,
     );
     add_text(
@@ -521,7 +548,7 @@ fn test_custom_fonts_pdf() {
         &f1,
         "20pt Inter: Large text with custom font",
         50.0,
-        540.0,
+        490.0,
         20.0,
     );
 
@@ -533,7 +560,7 @@ fn test_custom_fonts_pdf() {
         &f2,
         "Red JetBrains Mono text",
         50.0,
-        490.0,
+        440.0,
         16.0,
     );
 
@@ -544,7 +571,7 @@ fn test_custom_fonts_pdf() {
         &f2,
         "Blue JetBrains Mono text",
         50.0,
-        465.0,
+        415.0,
         16.0,
     );
 
@@ -556,7 +583,7 @@ fn test_custom_fonts_pdf() {
         &f1,
         "Inter: Symbols: αβγδεζηθικλμνξοπρστυφχψω",
         50.0,
-        420.0,
+        370.0,
         14.0,
     );
 
@@ -566,7 +593,7 @@ fn test_custom_fonts_pdf() {
         &f2,
         "JetBrains: Code: fn main() { println!(\"Hello, World!\"); }",
         50.0,
-        395.0,
+        345.0,
         14.0,
     );
 

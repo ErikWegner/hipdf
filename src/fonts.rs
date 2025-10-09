@@ -467,6 +467,34 @@ impl Font {
         }
     }
 
+    /// Measures the width of a single character
+    pub fn char_width(&self, ch: char, size: f32) -> f32 {
+        match &self.font_type {
+            FontType::Standard(_) => size * 0.5,
+            FontType::TrueType { .. } | FontType::OpenType { .. } => {
+                let default_width = self
+                    .metrics
+                    .as_ref()
+                    .map(|m| m.default_width)
+                    .unwrap_or(1000);
+
+                let glyph_id = self
+                    .glyph_mapping
+                    .get(&(ch as u32))
+                    .copied()
+                    .unwrap_or(self.missing_glyph_id);
+                
+                let width = self
+                    .glyph_widths
+                    .get(&glyph_id)
+                    .copied()
+                    .unwrap_or(default_width);
+
+                (width as f32 * size) / 1000.0
+            }
+        }
+    }
+
     /// Encodes text for use with this font in PDF
     pub fn encode_text(&self, text: &str) -> Vec<u8> {
         match &self.font_type {
@@ -592,6 +620,27 @@ impl FontManager {
             _ => return Err("Not a TrueType/OpenType font".into()),
         };
 
+        // For maximum compatibility, we must provide an explicit CIDToGIDMap stream instead of
+        // relying on the "/Identity" shortcut, which is poorly supported by some viewers
+        // (including macOS Preview) and can cause character encoding issues.
+
+        // We need to parse the font here to get the total number of glyphs.
+        let face = ttf_parser::Face::parse(font_data, 0)
+            .map_err(|e| format!("Failed to parse font for GID map: {:?}", e))?;
+        let num_glyphs = face.number_of_glyphs();
+
+        // Create the identity mapping data: CID `i` maps to GID `i`.
+        // This is a stream of big-endian u16 values.
+        let mut gid_map_data = Vec::with_capacity(num_glyphs as usize * 2);
+        for i in 0..num_glyphs {
+            gid_map_data.push((i >> 8) as u8); // High byte of GID
+            gid_map_data.push((i & 0xFF) as u8); // Low byte of GID
+        }
+
+        // Create a stream object for the mapping and add it to the document.
+        let cid_to_gid_map_stream = Stream::new(dictionary!{}, gid_map_data);
+        let cid_to_gid_map_id = doc.add_object(cid_to_gid_map_stream);
+
         // Create font file stream
         let font_file = Stream::new(
             dictionary! {
@@ -648,7 +697,8 @@ impl FontManager {
             },
             "FontDescriptor" => Object::Reference(descriptor_id),
             "DW" => default_width,
-            "CIDToGIDMap" => Object::Name(b"Identity".to_vec()),
+            // --- USE THE EXPLICIT STREAM REFERENCE ---
+            "CIDToGIDMap" => Object::Reference(cid_to_gid_map_id),
         };
         if let Some(width_array) = Self::build_width_array(&font.glyph_widths) {
             cid_font.set("W", width_array);
@@ -1047,6 +1097,194 @@ impl TextOperations {
 /// Utility functions for common text operations
 pub mod utils {
     use super::*;
+
+    /// Represents a line of text with its content and position
+    #[derive(Debug, Clone)]
+    pub struct TextLine {
+        pub text: String,
+        pub x: f32,
+        pub y: f32,
+    }
+
+    /// Word wrapping strategy
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub enum WrapStrategy {
+        /// Break on word boundaries (default)
+        Word,
+        /// Break on character boundaries (for long words)
+        Character,
+        /// Hybrid: try word breaks, fall back to character breaks
+        Hybrid,
+    }
+
+    /// Text alignment options
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub enum TextAlign {
+        Left,
+        Center,
+        Right,
+    }
+
+    /// Wraps text into multiple lines respecting width constraint
+    pub fn wrap_text(
+        font: &Font,
+        text: &str,
+        max_width: f32,
+        font_size: f32,
+        strategy: WrapStrategy,
+    ) -> Vec<String> {
+        if text.is_empty() {
+            return vec![];
+        }
+
+        match strategy {
+            WrapStrategy::Word => wrap_by_words(font, text, max_width, font_size),
+            WrapStrategy::Character => wrap_by_characters(font, text, max_width, font_size),
+            WrapStrategy::Hybrid => {
+                let lines = wrap_by_words(font, text, max_width, font_size);
+                // Check if any line is still too long
+                let mut result = Vec::new();
+                for line in lines {
+                    let line_width = font.text_width(&line, font_size);
+                    if line_width > max_width {
+                        // Break this line by characters
+                        result.extend(wrap_by_characters(font, &line, max_width, font_size));
+                    } else {
+                        result.push(line);
+                    }
+                }
+                result
+            }
+        }
+    }
+
+    fn wrap_by_words(font: &Font, text: &str, max_width: f32, font_size: f32) -> Vec<String> {
+        let mut lines = Vec::new();
+        let words: Vec<&str> = text.split_whitespace().collect();
+        
+        if words.is_empty() {
+            return lines;
+        }
+
+        let mut current_line = String::new();
+
+        for word in words {
+            let test_line = if current_line.is_empty() {
+                word.to_string()
+            } else {
+                format!("{} {}", current_line, word)
+            };
+
+            let width = font.text_width(&test_line, font_size);
+
+            if width > max_width && !current_line.is_empty() {
+                lines.push(current_line.clone());
+                current_line = word.to_string();
+            } else {
+                current_line = test_line;
+            }
+        }
+
+        if !current_line.is_empty() {
+            lines.push(current_line);
+        }
+
+        lines
+    }
+
+    fn wrap_by_characters(font: &Font, text: &str, max_width: f32, font_size: f32) -> Vec<String> {
+        let mut lines = Vec::new();
+        let mut current_line = String::new();
+        let mut current_width = 0.0;
+
+        for ch in text.chars() {
+            let char_width = font.char_width(ch, font_size);
+            
+            if current_width + char_width > max_width && !current_line.is_empty() {
+                lines.push(current_line.clone());
+                current_line.clear();
+                current_width = 0.0;
+            }
+
+            current_line.push(ch);
+            current_width += char_width;
+        }
+
+        if !current_line.is_empty() {
+            lines.push(current_line);
+        }
+
+        lines
+    }
+
+    /// Creates a multi-line text block with proper wrapping and alignment
+    pub fn create_text_block(
+        font_resource: &str,
+        font: &Font,
+        text: &str,
+        x: f32,
+        y: f32,
+        font_size: f32,
+        max_width: Option<f32>,
+        max_height: Option<f32>,
+        line_height: f32,
+        align: TextAlign,
+        wrap_strategy: WrapStrategy,
+    ) -> Vec<Operation> {
+        let mut operations = Vec::new();
+
+        // Split text by explicit line breaks first
+        let paragraphs: Vec<&str> = text.split('\n').collect();
+        let mut all_lines = Vec::new();
+
+        for paragraph in paragraphs {
+            if let Some(width) = max_width {
+                let wrapped = wrap_text(font, paragraph, width, font_size, wrap_strategy);
+                all_lines.extend(wrapped);
+            } else {
+                all_lines.push(paragraph.to_string());
+            }
+        }
+
+        // Limit lines by max_height if specified
+        if let Some(max_h) = max_height {
+            let max_lines = (max_h / line_height).floor() as usize;
+            if all_lines.len() > max_lines {
+                all_lines.truncate(max_lines);
+            }
+        }
+
+        operations.push(TextOperations::begin_text());
+        operations.push(TextOperations::set_font(font_resource, font_size));
+
+        let mut current_y = y;
+
+        for line in all_lines {
+            let line_width = font.text_width(&line, font_size);
+            let line_x = match align {
+                TextAlign::Left => x,
+                TextAlign::Center => {
+                    x + (max_width.unwrap_or(line_width) - line_width) / 2.0
+                }
+                TextAlign::Right => {
+                    x + max_width.unwrap_or(line_width) - line_width
+                }
+            };
+
+            operations.push(TextOperations::position(line_x, current_y));
+            
+            if font.needs_utf16_encoding() {
+                operations.push(TextOperations::show_encoded(font.encode_text(&line)));
+            } else {
+                operations.push(TextOperations::show(&line));
+            }
+
+            current_y -= line_height;
+        }
+
+        operations.push(TextOperations::end_text());
+        operations
+    }
 
     /// Creates a simple text paragraph with word wrapping
     pub fn create_paragraph(
