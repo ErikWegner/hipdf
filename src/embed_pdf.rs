@@ -3,8 +3,8 @@
 //! This module provides functionality to embed other PDF documents within a PDF being created,
 //! with support for multi-page documents, various layout strategies, and transformations.
 
-use lopdf::{content::Operation, dictionary, Dictionary, Document, Object, Stream};
-use std::collections::HashMap;
+use lopdf::{content::Operation, dictionary, Dictionary, Document, Object, ObjectId, Stream};
+use std::collections::{BTreeSet, HashMap};
 use std::io::{Error, ErrorKind, Result};
 use std::path::Path;
 
@@ -200,7 +200,7 @@ impl PdfEmbedder {
         }
     }
 
-    /// Load a PDF from file
+    /// Load a PDF from file, sanitizing it for safe embedding.
     pub fn load_pdf(&mut self, path: impl AsRef<Path>) -> Result<String> {
         let path_str = path.as_ref().to_string_lossy().to_string();
 
@@ -208,9 +208,13 @@ impl PdfEmbedder {
             return Ok(path_str);
         }
 
-        let source_doc = Document::load(path.as_ref()).map_err(|e| {
+        let mut source_doc = Document::load(path.as_ref()).map_err(|e| {
             Error::new(ErrorKind::InvalidData, format!("Failed to load PDF: {}", e))
         })?;
+
+        // Sanitize the document before caching and using it.
+        self.sanitize_pdf(&mut source_doc)?;
+
         let info = self.extract_pdf_info(&source_doc)?;
 
         self.loaded_pdfs
@@ -218,18 +222,22 @@ impl PdfEmbedder {
         Ok(path_str)
     }
 
-    /// Load a PDF from bytes
+    /// Load a PDF from bytes, sanitizing it for safe embedding.
     pub fn load_pdf_from_bytes(&mut self, bytes: &[u8], identifier: &str) -> Result<String> {
         if self.loaded_pdfs.contains_key(identifier) {
             return Ok(identifier.to_string());
         }
 
-        let source_doc = Document::load_from(bytes).map_err(|e| {
+        let mut source_doc = Document::load_from(bytes).map_err(|e| {
             Error::new(
                 ErrorKind::InvalidData,
                 format!("Failed to load PDF from bytes: {}", e),
             )
         })?;
+
+        // Sanitize the document before caching and using it.
+        self.sanitize_pdf(&mut source_doc)?;
+
         let info = self.extract_pdf_info(&source_doc)?;
 
         self.loaded_pdfs
@@ -314,6 +322,80 @@ impl PdfEmbedder {
             operations: all_operations,
             xobject_resources,
         })
+    }
+
+    // Function to sanitize a PDF document by removing dangerous actions.
+    /// Traverses the document and neutralizes dangerous actions like JavaScript or Launch.
+    fn sanitize_pdf(&self, doc: &mut Document) -> Result<()> {
+        let mut dangerous_action_ids = BTreeSet::new();
+
+        // Pass 1: Identify all dangerous action objects.
+        // We check all objects, but also specifically look in common places like
+        // the document catalog (/OpenAction) and page annotations (/Annots).
+
+        // Check the document catalog for an /OpenAction
+        if let Ok(catalog) = doc.catalog() {
+            if let Ok(Object::Reference(id)) = catalog.get(b"OpenAction") {
+                if self.is_action_dangerous(doc, *id)? {
+                    dangerous_action_ids.insert(*id);
+                }
+            }
+        }
+
+        // Check all page objects for annotations with dangerous actions
+        for (_page_num, page_id) in doc.get_pages() {
+            if let Ok(page_dict) = doc.get_object(page_id).and_then(|o| o.as_dict()) {
+                if let Ok(annots) = page_dict.get(b"Annots") {
+                    let annots_obj = match annots {
+                        Object::Reference(ref_id) => {
+                            doc.get_object(*ref_id)
+                        }
+                        _ => Ok(annots),
+                    };
+                    if let Ok(Object::Array(annots_arr)) = annots_obj {
+                        for annot_ref in annots_arr {
+                            if let Object::Reference(id) = annot_ref {
+                                if let Ok(annot_dict) = doc.get_object(*id).and_then(|o| o.as_dict()) {
+                                    if let Ok(action_ref) = annot_dict.get(b"A") {
+                                        if let Object::Reference(action_id) = action_ref {
+                                            if self.is_action_dangerous(doc, *action_id)? {
+                                                dangerous_action_ids.insert(*action_id);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Pass 2: Neuter the identified dangerous actions.
+        // We replace the action dictionary with an empty one, which is harmless
+        // but preserves the object reference, preventing the document from breaking.
+        for id in dangerous_action_ids {
+            doc.objects.insert(id, Object::Dictionary(Dictionary::new()));
+        }
+
+        Ok(())
+    }
+
+    // Helper function to check if an action object is dangerous.
+    /// Checks if the object at a given ID is a dangerous action dictionary.
+    fn is_action_dangerous(&self, doc: &Document, action_id: ObjectId) -> Result<bool> {
+        if let Ok(action_obj) = doc.get_object(action_id) {
+            if let Ok(dict) = action_obj.as_dict() {
+                if let Ok(Object::Name(action_type)) = dict.get(b"S") {
+                    let action_type_str = String::from_utf8_lossy(action_type);
+                    // Add other action types to this list if needed (e.g., "URI", "GoToR")
+                    if action_type_str == "JavaScript" || action_type_str == "Launch" {
+                        return Ok(true);
+                    }
+                }
+            }
+        }
+        Ok(false)
     }
 
     /// Import a page from source document as a Form XObject
