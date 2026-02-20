@@ -1238,7 +1238,11 @@ pub mod utils {
         let mut all_lines = Vec::new();
 
         for paragraph in paragraphs {
-            if let Some(width) = max_width {
+            if paragraph.is_empty() {
+                // Preserve blank lines: an empty paragraph between \n\n is one
+                // visual blank line, not zero lines.
+                all_lines.push(String::new());
+            } else if let Some(width) = max_width {
                 let wrapped = wrap_text(font, paragraph, width, font_size, wrap_strategy);
                 all_lines.extend(wrapped);
             } else {
