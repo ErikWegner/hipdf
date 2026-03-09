@@ -184,6 +184,10 @@ pub struct PdfEmbedder {
     loaded_pdfs: HashMap<String, (Document, EmbeddedPdfInfo)>,
     /// Counter for generating unique resource names
     resource_counter: usize,
+    /// Cache mapping (source_identifier, source_ObjectId) → target ObjectId so
+    /// shared resources are copied only once. Scoped per source document to
+    /// prevent cross-contamination when multiple PDFs are embedded.
+    copied_objects: HashMap<(String, ObjectId), ObjectId>,
 }
 
 impl Default for PdfEmbedder {
@@ -197,6 +201,7 @@ impl PdfEmbedder {
         PdfEmbedder {
             loaded_pdfs: HashMap::new(),
             resource_counter: 0,
+            copied_objects: HashMap::new(),
         }
     }
 
@@ -267,6 +272,7 @@ impl PdfEmbedder {
         // Clone necessary data to avoid borrowing issues
         let info = info.clone();
         let source_doc = source_doc.clone();
+        let source_id_key = source_identifier.to_string();
 
         // Determine which pages to include
         let pages_to_include = self.determine_pages(options, info.page_count);
@@ -295,7 +301,7 @@ impl PdfEmbedder {
             let xobject_name = format!("XO{}", self.resource_counter);
 
             // Import the page as a Form XObject
-            let xobject_ref = self.import_page_as_xobject(target_doc, &source_doc, page_idx)?;
+            let xobject_ref = self.import_page_as_xobject(target_doc, &source_doc, page_idx, &source_id_key)?;
 
             // Add to resources map
             xobject_resources.insert(xobject_name.clone(), xobject_ref.clone());
@@ -404,6 +410,7 @@ impl PdfEmbedder {
         target_doc: &mut Document,
         source_doc: &Document,
         page_index: usize,
+        source_id: &str,
     ) -> Result<Object> {
         // Get the page from source document
         let pages = source_doc.get_pages();
@@ -425,15 +432,63 @@ impl PdfEmbedder {
             )
         })?;
 
-        // Get page dimensions
-        let media_box = self.get_media_box(page_dict, source_doc)?;
+        // Get page dimensions (raw MediaBox)
+        let (raw_w, raw_h) = self.get_raw_media_box_dims(page_dict, source_doc);
 
-        // Get page content
-        let content_stream = self.get_page_content_stream(source_doc, page_dict)?;
+        // Read the /Rotate attribute (may be inherited from parent /Pages nodes).
+        // Form XObjects don't support /Rotate, so we must bake the rotation into
+        // the BBox and prepend a correcting `cm` transform to the content stream.
+        let rotate = self.resolve_page_rotate(page_dict, source_doc);
+
+        // After rotation the visual (BBox) dimensions may be swapped.
+        // /Rotate specifies CW degrees the viewer applies on display.
+        // We must bake the same CW rotation into the content stream.
+        let (bbox_w, bbox_h, rotation_cm) = match rotate {
+            90 => (
+                raw_h,
+                raw_w,
+                // 90° CW: x' = y,  y' = W - x  →  [0 -1 1 0 0 W]
+                Some(format!("0 -1 1 0 0 {} cm\n", raw_w)),
+            ),
+            180 => (
+                raw_w,
+                raw_h,
+                // 180°: x' = W - x,  y' = H - y  →  [-1 0 0 -1 W H]
+                Some(format!("-1 0 0 -1 {} {} cm\n", raw_w, raw_h)),
+            ),
+            270 => (
+                raw_h,
+                raw_w,
+                // 270° CW (= 90° CCW): x' = H - y,  y' = x  →  [0 1 -1 0 H 0]
+                Some(format!("0 1 -1 0 {} 0 cm\n", raw_h)),
+            ),
+            _ => (raw_w, raw_h, None),
+        };
+
+        let bbox = Object::Array(vec![
+            Object::Real(0.0),
+            Object::Real(0.0),
+            Object::Real(bbox_w),
+            Object::Real(bbox_h),
+        ]);
+
+        // Build the Form XObject content stream.
+        // Always decompress and re-compress to ensure consistency — lopdf may
+        // transparently decode stream.content during loading while leaving the
+        // Filter key in the dict, so trusting raw bytes + dict is unreliable.
+        let raw_content = self.get_page_content_stream(source_doc, page_dict)?;
+        let final_content = if let Some(cm_str) = rotation_cm {
+            let mut buf = cm_str.into_bytes();
+            buf.extend_from_slice(&raw_content);
+            buf
+        } else {
+            raw_content
+        };
+        let content_bytes = miniz_oxide::deflate::compress_to_vec_zlib(&final_content, 6);
 
         // Get page resources
         let resources = if let Ok(res_obj) = page_dict.get(b"Resources") {
-            self.copy_object_to_target(source_doc, target_doc, res_obj)?
+            self.copy_object_to_target(source_doc, target_doc, res_obj, source_id)?
         } else {
             Object::Dictionary(Dictionary::new())
         };
@@ -442,13 +497,14 @@ impl PdfEmbedder {
         let xobject_dict = dictionary! {
             "Type" => "XObject",
             "Subtype" => "Form",
-            "BBox" => media_box,
+            "BBox" => bbox,
             "Resources" => resources,
             "Matrix" => vec![1.into(), 0.into(), 0.into(), 1.into(), 0.into(), 0.into()],
+            "Filter" => "FlateDecode",
         };
 
         // Create the Form XObject stream
-        let xobject_stream = Stream::new(xobject_dict, content_stream);
+        let xobject_stream = Stream::new(xobject_dict, content_bytes);
         let xobject_id = target_doc.add_object(xobject_stream);
 
         Ok(Object::Reference(xobject_id))
@@ -496,18 +552,39 @@ impl PdfEmbedder {
         }
     }
 
-    /// Copy an object from source to target document
+    /// Copy an object from source to target document, deduplicating shared objects.
+    /// `source_id` scopes the dedup cache to the source document so different
+    /// PDFs with colliding ObjectIds never cross-contaminate.
     fn copy_object_to_target(
-        &self,
+        &mut self,
         source_doc: &Document,
         target_doc: &mut Document,
         obj: &Object,
+        source_id: &str,
     ) -> Result<Object> {
         match obj {
             Object::Reference(ref_id) => {
+                let cache_key = (source_id.to_string(), *ref_id);
+                // Check if we already copied this object
+                if let Some(&target_id) = self.copied_objects.get(&cache_key) {
+                    return Ok(Object::Reference(target_id));
+                }
                 // Dereference and copy the actual object
                 if let Ok(actual_obj) = source_doc.get_object(*ref_id) {
-                    self.copy_object_to_target(source_doc, target_doc, actual_obj)
+                    let copied = self.copy_object_to_target(source_doc, target_doc, actual_obj, source_id)?;
+                    // If the copied result is a reference (stream), cache it directly.
+                    // Otherwise wrap in a new object and cache.
+                    match &copied {
+                        Object::Reference(new_id) => {
+                            self.copied_objects.insert(cache_key, *new_id);
+                        }
+                        _ => {
+                            let new_id = target_doc.add_object(copied.clone());
+                            self.copied_objects.insert(cache_key, new_id);
+                            return Ok(Object::Reference(new_id));
+                        }
+                    }
+                    Ok(copied)
                 } else {
                     Ok(Object::Null)
                 }
@@ -515,7 +592,7 @@ impl PdfEmbedder {
             Object::Dictionary(dict) => {
                 let mut new_dict = Dictionary::new();
                 for (key, value) in dict.iter() {
-                    let new_value = self.copy_object_to_target(source_doc, target_doc, value)?;
+                    let new_value = self.copy_object_to_target(source_doc, target_doc, value, source_id)?;
                     new_dict.set(key.clone(), new_value);
                 }
                 Ok(Object::Dictionary(new_dict))
@@ -523,7 +600,7 @@ impl PdfEmbedder {
             Object::Array(array) => {
                 let mut new_array = Vec::new();
                 for item in array {
-                    let new_item = self.copy_object_to_target(source_doc, target_doc, item)?;
+                    let new_item = self.copy_object_to_target(source_doc, target_doc, item, source_id)?;
                     new_array.push(new_item);
                 }
                 Ok(Object::Array(new_array))
@@ -533,6 +610,7 @@ impl PdfEmbedder {
                     source_doc,
                     target_doc,
                     &Object::Dictionary(stream.dict.clone()),
+                    source_id,
                 )? {
                     dict
                 } else {
@@ -547,34 +625,30 @@ impl PdfEmbedder {
         }
     }
 
-    /// Get MediaBox from page dictionary
-    fn get_media_box(&self, page_dict: &Dictionary, source_doc: &Document) -> Result<Object> {
-        if let Ok(media_box_obj) = page_dict.get(b"MediaBox") {
-            match media_box_obj {
-                Object::Reference(ref_id) => {
-                    if let Ok(actual_obj) = source_doc.get_object(*ref_id) {
-                        Ok(actual_obj.clone())
-                    } else {
-                        // Default A4 size
-                        Ok(Object::Array(vec![
-                            0.into(),
-                            0.into(),
-                            595.into(),
-                            842.into(),
-                        ]))
-                    }
-                }
-                _ => Ok(media_box_obj.clone()),
+    /// Get the raw MediaBox dimensions (width, height) without applying /Rotate.
+    fn get_raw_media_box_dims(&self, page_dict: &Dictionary, source_doc: &Document) -> (f32, f32) {
+        let obj = page_dict
+            .get(b"MediaBox")
+            .ok()
+            .and_then(|o| match o {
+                Object::Reference(id) => source_doc.get_object(*id).ok().cloned(),
+                other => Some(other.clone()),
+            });
+        if let Some(Object::Array(coords)) = obj {
+            if coords.len() >= 4 {
+                let to_f32 = |o: &Object| match o {
+                    Object::Real(v) => *v,
+                    Object::Integer(v) => *v as f32,
+                    _ => 0.0,
+                };
+                let x1 = to_f32(&coords[0]);
+                let y1 = to_f32(&coords[1]);
+                let x2 = to_f32(&coords[2]);
+                let y2 = to_f32(&coords[3]);
+                return ((x2 - x1).abs(), (y2 - y1).abs());
             }
-        } else {
-            // Default A4 size
-            Ok(Object::Array(vec![
-                0.into(),
-                0.into(),
-                595.into(),
-                842.into(),
-            ]))
         }
+        (595.0, 842.0)
     }
 
     /// Generate operations to place an XObject
@@ -671,48 +745,45 @@ impl PdfEmbedder {
         })
     }
 
-    /// Get dimensions of a page from its dictionary
+    /// Get dimensions of a page from its dictionary.
+    /// Returns the VISUAL (post-/Rotate) dimensions so grid layouts use correct cell sizes.
     fn get_page_dimensions(&self, page_dict: &Dictionary, source_doc: &Document) -> (f32, f32) {
-        if let Ok(media_box_obj) = page_dict.get(b"MediaBox") {
-            let media_box = match media_box_obj {
-                Object::Reference(ref_id) => {
-                    if let Ok(actual_obj) = source_doc.get_object(*ref_id) {
-                        actual_obj
-                    } else {
-                        media_box_obj
-                    }
-                }
-                _ => media_box_obj,
-            };
+        let (raw_w, raw_h) = self.get_raw_media_box_dims(page_dict, source_doc);
+        let rotate = self.resolve_page_rotate(page_dict, source_doc);
+        match rotate {
+            90 | 270 => (raw_h, raw_w),
+            _ => (raw_w, raw_h),
+        }
+    }
 
-            if let Object::Array(coords) = media_box {
-                if coords.len() >= 4 {
-                    // Extract coordinates, handling different number types
-                    let x1 = match &coords[0] {
-                        Object::Real(val) => *val,
-                        Object::Integer(val) => *val as f32,
-                        _ => 0.0,
-                    };
-                    let y1 = match &coords[1] {
-                        Object::Real(val) => *val,
-                        Object::Integer(val) => *val as f32,
-                        _ => 0.0,
-                    };
-                    let x2 = match &coords[2] {
-                        Object::Real(val) => *val,
-                        Object::Integer(val) => *val as f32,
-                        _ => 595.0,
-                    };
-                    let y2 = match &coords[3] {
-                        Object::Real(val) => *val,
-                        Object::Integer(val) => *val as f32,
-                        _ => 842.0,
-                    };
-                    return ((x2 - x1).abs(), (y2 - y1).abs());
+    /// Resolve the effective /Rotate value for a page, walking up the page tree
+    /// to find inherited values. Returns 0, 90, 180, or 270.
+    fn resolve_page_rotate(&self, page_dict: &Dictionary, doc: &Document) -> i64 {
+        // Check the page dict itself first
+        if let Ok(Object::Integer(n)) = page_dict.get(b"Rotate") {
+            return (*n).rem_euclid(360);
+        }
+        // Walk up the page tree via /Parent references
+        let mut current = page_dict.get(b"Parent").ok().cloned();
+        while let Some(obj) = current {
+            let parent_obj = match &obj {
+                Object::Reference(id) => doc.get_object(*id).ok(),
+                _ => None,
+            };
+            if let Some(parent) = parent_obj {
+                if let Ok(dict) = parent.as_dict() {
+                    if let Ok(Object::Integer(n)) = dict.get(b"Rotate") {
+                        return (*n).rem_euclid(360);
+                    }
+                    current = dict.get(b"Parent").ok().cloned();
+                } else {
+                    break;
                 }
+            } else {
+                break;
             }
         }
-        (595.0, 842.0) // Default A4 size
+        0
     }
 
     /// Determine which pages to include based on options
