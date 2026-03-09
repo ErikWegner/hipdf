@@ -89,12 +89,16 @@ impl ColorSpace {
             ColorSpace::DeviceCMYK => 4,
             ColorSpace::Indexed { .. } => 1, // Indexed uses 1 component (index values)
             ColorSpace::ICCBased(profile) => {
-                // Parse ICC profile to get number of components
-                // For simplicity, assuming RGB (3) or Gray (1) based on profile size
-                if profile.len() > 1000 {
-                    3
+                // Parse the ICC profile header: bytes 16-19 are the colour space signature.
+                // ICC spec: "RGB " → 3, "GRAY" → 1, "CMYK" → 4, everything else (Lab, XYZ, …) → 3.
+                if profile.len() >= 20 {
+                    match &profile[16..20] {
+                        b"GRAY" => 1,
+                        b"CMYK" => 4,
+                        _ => 3, // RGB , Lab , XYZ , HSV , HLS , Luv , YCbCr …
+                    }
                 } else {
-                    1
+                    3 // Malformed/empty profile; default to RGB.
                 }
             }
         }
