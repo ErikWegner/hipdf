@@ -233,12 +233,24 @@ impl PdfEmbedder {
             return Ok(identifier.to_string());
         }
 
-        let mut source_doc = Document::load_from(bytes).map_err(|e| {
-            Error::new(
-                ErrorKind::InvalidData,
-                format!("Failed to load PDF from bytes: {}", e),
-            )
-        })?;
+        // lopdf internally uses weezl for LZW-compressed content streams; malformed data can
+        // trigger an assertion panic instead of returning an error, so we catch it here.
+        let load_result = std::panic::catch_unwind(|| Document::load_from(bytes));
+        let mut source_doc = match load_result {
+            Ok(Ok(doc)) => doc,
+            Ok(Err(e)) => {
+                return Err(Error::new(
+                    ErrorKind::InvalidData,
+                    format!("Failed to load PDF from bytes: {}", e),
+                ))
+            }
+            Err(_) => {
+                return Err(Error::new(
+                    ErrorKind::InvalidData,
+                    "PDF loading failed: malformed LZW/compressed stream in PDF",
+                ))
+            }
+        };
 
         // Sanitize the document before caching and using it.
         self.sanitize_pdf(&mut source_doc)?;
@@ -534,10 +546,14 @@ impl PdfEmbedder {
                 }
             }
             Object::Stream(stream) => {
-                // Decode the stream content
-                stream
-                    .decompressed_content()
-                    .or_else(|_| Ok(stream.content.clone()))
+                // Decode the stream content — weezl (LZW decoder used by lopdf) can panic on
+                // malformed streams instead of returning an error, so we catch_unwind it.
+                let result = std::panic::catch_unwind(|| stream.decompressed_content());
+                match result {
+                    Ok(Ok(bytes)) => Ok(bytes),
+                    Ok(Err(_)) => Ok(stream.content.clone()),
+                    Err(_) => Ok(stream.content.clone()),
+                }
             }
             Object::Array(array) => {
                 let mut all_content = Vec::new();
