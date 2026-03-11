@@ -22,6 +22,7 @@ use png;
 pub enum ImageFormat {
     PNG,
     JPEG,
+    WebP,
 }
 
 /// Image color space with enhanced support
@@ -155,6 +156,7 @@ impl Image {
         match format {
             ImageFormat::PNG => Self::from_png_data_enhanced(buffer, source_path),
             ImageFormat::JPEG => Self::from_jpeg_data(buffer, source_path),
+            ImageFormat::WebP => Self::from_webp_data(buffer, source_path),
         }
     }
 
@@ -550,6 +552,11 @@ impl Image {
             return Ok(ImageFormat::JPEG);
         }
 
+        // Check WebP signature (RIFF....WEBP)
+        if data.len() >= 12 && &data[0..4] == b"RIFF" && &data[8..12] == b"WEBP" {
+            return Ok(ImageFormat::WebP);
+        }
+
         Err("Unknown image format".into())
     }
 
@@ -563,6 +570,56 @@ impl Image {
         self.metadata.width as f32 / self.metadata.height as f32
     }
 
+    /// Creates an image from WebP data
+    pub fn from_webp_data(
+        data: Vec<u8>,
+        source_path: Option<String>,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
+        use image::ImageReader;
+
+        let reader = ImageReader::new(Cursor::new(&data))
+            .with_guessed_format()?;
+        let dynamic_image = reader.decode()?;
+
+        let width = dynamic_image.width();
+        let height = dynamic_image.height();
+
+        let (color_space, has_alpha, processed_data, alpha_data) = if dynamic_image.color().has_alpha() {
+            let rgba = dynamic_image.to_rgba8();
+            let raw = rgba.into_raw();
+            let pixel_count = (width * height) as usize;
+            let mut rgb_data = Vec::with_capacity(pixel_count * 3);
+            let mut alpha = Vec::with_capacity(pixel_count);
+            for chunk in raw.chunks(4) {
+                rgb_data.extend_from_slice(&chunk[..3]);
+                alpha.push(chunk[3]);
+            }
+            (ColorSpace::DeviceRGB, true, rgb_data, Some(alpha))
+        } else {
+            let rgb = dynamic_image.to_rgb8();
+            (ColorSpace::DeviceRGB, false, rgb.into_raw(), None)
+        };
+
+        let metadata = ImageMetadata {
+            width,
+            height,
+            bits_per_component: 8,
+            color_space,
+            has_alpha,
+            format: ImageFormat::WebP,
+            gamma: None,
+            icc_profile: None,
+            srgb_intent: None,
+        };
+
+        Ok(Image {
+            metadata,
+            data: processed_data,
+            alpha_data,
+            source_path,
+        })
+    }
+
     /// Creates an image from bytes (for WASM compatibility)
     pub fn from_bytes(
         data: Vec<u8>,
@@ -573,6 +630,7 @@ impl Image {
         match format {
             ImageFormat::PNG => Self::from_png_data_enhanced(data, source_path),
             ImageFormat::JPEG => Self::from_jpeg_data(data, source_path),
+            ImageFormat::WebP => Self::from_webp_data(data, source_path),
         }
     }
 
@@ -584,6 +642,11 @@ impl Image {
     /// Creates an image from JPEG bytes (alias for consistency)
     pub fn from_jpeg_bytes(data: Vec<u8>) -> Result<Self, Box<dyn std::error::Error>> {
         Self::from_jpeg_data(data, None)
+    }
+
+    /// Creates an image from WebP bytes (alias for consistency)
+    pub fn from_webp_bytes(data: Vec<u8>) -> Result<Self, Box<dyn std::error::Error>> {
+        Self::from_webp_data(data, None)
     }
 }
 
@@ -635,7 +698,7 @@ impl ImageManager {
 
         let (image_id, mask_id) = match image.metadata.format {
             ImageFormat::JPEG => (self.embed_jpeg(doc, &image)?, None),
-            ImageFormat::PNG => {
+            ImageFormat::PNG | ImageFormat::WebP => {
                 let (img_id, mask) = self.embed_png_enhanced(doc, &image)?;
                 (img_id, mask)
             }
